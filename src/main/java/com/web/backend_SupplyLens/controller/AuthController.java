@@ -1,0 +1,28 @@
+package com.web.backend_SupplyLens.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.web.backend_SupplyLens.model.User;
+import com.web.backend_SupplyLens.service.AuthService;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    
+    @Autowired
+    private AuthService authService;
+
+    @PostMapping("/admin/login")
+    public String adminLogin(@RequestBody User user){
+        return authService.adminLogin(user.getEmail(), user.getPassword());
+    }
+
+    @PostMapping("/driver/login")
+    public String driverLogin(@RequestBody User user){
+        return authService.driverLogin(user.getDriverId(), user.getPin());
+    }
+}
