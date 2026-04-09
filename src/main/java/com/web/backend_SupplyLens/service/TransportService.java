@@ -17,9 +17,9 @@ public class TransportService {
     @Autowired
     private UserRepository userRepo;
 
-    public Transport assignDriver(Long transportId, Long userId){
+    public Transport assignDriver(Long transportId, String userId){
         Transport t =  transportRepo.findById(transportId).orElseThrow();
-        User driver = userRepo.findById(userId).orElseThrow();
+        User driver = userRepo.findByDriverId(userId).orElseThrow();
 
         t.setDriver(driver);
         return transportRepo.save(t);

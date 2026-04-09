@@ -16,32 +16,55 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-@Component
+//@Component
 public class JwtFilter extends OncePerRequestFilter {
-    
+
     @Autowired
     private JwtService jwtService;
 
-    @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException{
-        String authHeader = request.getHeader("Authorization");
-
-        if(authHeader == null || !authHeader.startsWith("Bearer ")){
-            filterChain.doFilter(request, response);
-            return;
+        public JwtFilter(JwtService jwtService) {
+            this.jwtService = jwtService;
         }
-        String token = authHeader.substring(7);
-        String username = jwtService.extractUsername(token);
-        String role = jwtService.extractRole(token);
 
-        List<GrantedAuthority> authoriries = List.of(new SimpleGrantedAuthority(("ROLE_"+role)));
+        @Override
+        protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+            String path = request.getRequestURI();
+            System.out.println(">>> FILTER CHECK - Path: " + path);
+            boolean skip = path.startsWith("/api/auth") || path.startsWith("/api/alerts/from-python");
+            System.out.println(">>> SKIPPING FILTER: " + skip);
+            return skip;
+        }
 
-        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(username, null, authoriries);
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                FilterChain filterChain)
+                throws ServletException, IOException {
 
-        SecurityContextHolder.getContext().setAuthentication(authToken);
+            
+            System.out.println(">>> FILTER RUNNING for: " + request.getRequestURI());
+            String authHeader = request.getHeader("Authorization");
 
-        filterChain.doFilter(request, response);
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                filterChain.doFilter(request, response);
+                return;
+            }
 
-    }
+            try {
+                String token = authHeader.substring(7);
+                String username = jwtService.extractUsername(token);
+                String role = jwtService.extractRole(token);
 
+                List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(username, null,
+                        authorities);
+
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            } catch (Exception e) {
+                // Log the exception if needed
+                System.out.println("JWT validation failed: " + e.getMessage());
+            }
+
+            filterChain.doFilter(request, response);
+        }
 }

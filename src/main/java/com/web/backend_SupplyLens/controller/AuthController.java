@@ -1,6 +1,7 @@
 package com.web.backend_SupplyLens.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +16,17 @@ public class AuthController {
     
     @Autowired
     private AuthService authService;
+
+    @GetMapping("/test")
+    public String test() {
+        return "Auth controller is reachable!";
+    }
+
+    @PostMapping("/register")
+    public User register(@RequestBody User user){
+        System.out.println("REGISTER HIT");
+        return authService.register(user);
+    }
 
     @PostMapping("/admin/login")
     public String adminLogin(@RequestBody User user){

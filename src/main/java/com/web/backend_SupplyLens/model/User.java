@@ -1,12 +1,16 @@
 package com.web.backend_SupplyLens.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
+@Table(name =  "users")
 public class User {
     
     @Id
@@ -17,12 +21,14 @@ public class User {
     @Column(unique = true)
     private String email; //only for admin
 
+    @JsonIgnore
     private String password;
 
     private String role;//admin or driver
 
     //for driver
     private String driverId;
+    @JsonIgnore
     private String pin;
 
     public User() {
