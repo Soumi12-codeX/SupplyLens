@@ -18,6 +18,9 @@ public class Route {
     private String destination;
     private double distance;
     private LocalTime estimatedTime;
+    private String riskLevel; //low, medium, high
+    private String status; //active, rerouted, blocked
+
     public Long getId() {
         return id;
     }
@@ -47,5 +50,17 @@ public class Route {
     }
     public void setEstimatedTime(LocalTime estimatedTime) {
         this.estimatedTime = estimatedTime;
+    }
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+    public void setRiskLevel(String riskLevel) {
+        this.riskLevel = riskLevel;
+    }
+    public String getStatus() {
+        return status;
+    }
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

@@ -1,14 +1,20 @@
 package com.web.backend_SupplyLens.model;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 
 @Entity
 public class Alert {
@@ -26,6 +32,14 @@ public class Alert {
    
     @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
     private LocalDateTime time;
+
+    @Enumerated(EnumType.STRING)
+    private AlertStatus status = AlertStatus.PENDING;
+
+    private String affectedShipmentIds;
+
+    @OneToMany(mappedBy = "alert", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<RouteOption> routeOptions;
 
     public Alert() {
     }
@@ -63,6 +77,24 @@ public class Alert {
         return time;
     }
     public void setTime(LocalDateTime time) {
-        this.time = LocalDateTime.now();
-    }       
+        this.time = time;
+    } 
+    public String  getAffectedShipmentIds(){
+        return affectedShipmentIds;
+    }     
+    public void setAffectedShipmentIds(String affectedShipmentIds){
+        this.affectedShipmentIds = affectedShipmentIds;
+    }
+    public List<RouteOption> getRouteOptions(){
+        return routeOptions;
+    }
+    public void setRouteOptions(List<RouteOption> routeOptions){
+        this.routeOptions = routeOptions;
+    }
+    public AlertStatus getStatus() {
+        return status;
+    }
+    public void setStatus(AlertStatus status) {
+        this.status = status;
+    }
 }

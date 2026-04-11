@@ -7,6 +7,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -30,6 +32,10 @@ public class User {
     private String driverId;
     @JsonIgnore
     private String pin;
+
+    @ManyToOne
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
 
     public User() {
     }
@@ -75,5 +81,11 @@ public class User {
     }
     public void setPin(String pin) {
         this.pin = pin;
+    }
+    public Warehouse getWarehouse() {
+        return warehouse;
+    }
+    public void setWarehouse(Warehouse warehouse) {
+        this.warehouse = warehouse;
     }
 }

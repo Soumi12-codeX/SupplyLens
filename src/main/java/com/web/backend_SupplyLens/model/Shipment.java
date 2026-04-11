@@ -4,6 +4,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 
 @Entity
@@ -20,6 +21,16 @@ public class Shipment {
     private Route route;
 
     private String status;
+
+    private String routeStatus; //normal, rerouted
+    private String currentPath; //set when admin selects a route
+
+    private String assignedDriverId;
+    private String assignmentStatus; // UNASSIGNED, ASSIGNED, IN_PROGRESS, DELIVERED
+
+    @ManyToOne
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;     // which warehouse this shipment is from
 
     public Long getId() {
         return id;
@@ -45,5 +56,35 @@ public class Shipment {
     public void setStatus(String status) {
         this.status = status;
     }
-
+    public String getRouteStatus() {
+        return routeStatus;
+    }
+    public void setRouteStatus(String routeStatus) {
+        this.routeStatus = routeStatus;
+    }
+    public String getCurrentPath() {
+        return currentPath;
+    }
+    public void setCurrentPath(String currentPath) {
+        this.currentPath = currentPath;
+    }
+    public String getAssignedDriverId() {
+        return assignedDriverId;
+    }
+    public void setAssignedDriverId(String assignedDriverId) {
+        this.assignedDriverId = assignedDriverId;
+    }
+    public String getAssignmentStatus() {
+        return assignmentStatus;
+    }
+    public void setAssignmentStatus(String assignmentStatus) {
+        this.assignmentStatus = assignmentStatus;
+    }
+    public Warehouse getWarehouse() {
+        return warehouse;
+    }
+    public void setWarehouse(Warehouse warehouse) {
+        this.warehouse = warehouse;
+    }
+    
 }

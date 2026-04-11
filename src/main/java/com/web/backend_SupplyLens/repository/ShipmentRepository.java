@@ -8,6 +8,15 @@ import org.springframework.stereotype.Repository;
 import com.web.backend_SupplyLens.model.Shipment;
 
 @Repository
-public interface ShipmentRepository extends JpaRepository<Shipment, String> {
+public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     List<Shipment> findByTransport_Driver_DriverId(String driverId);
+    // for AlertService.updateShipments() - findById(Long) now works correctly
+    // for ShipmentService - assigned driver queries
+    List<Shipment> findByAssignedDriverId(String driverId);
+    
+    // for admin - see all shipments from their warehouse
+    List<Shipment> findByWarehouse_Id(Long warehouseId);
+    
+    // for admin - filter by status
+    List<Shipment> findByAssignmentStatus(String status);
 }
