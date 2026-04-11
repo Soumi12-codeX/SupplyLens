@@ -14,13 +14,22 @@ public class Transport {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
+    private String transportId;
+    
     @ManyToOne
     @JoinColumn(name = "driver_id")
     private User driver;
 
-    private String status;
+    private String status; //idle, in_transit, rerouted
 
     private String currentLocation;
+
+    public String getTransportId() {
+        return transportId;
+    }
+    public void setTransportId(String transportId) {
+        this.transportId = transportId;
+    }
 
     public Long getId() {
         return id;
@@ -28,6 +37,7 @@ public class Transport {
     public void setId(Long id) {
         this.id = id;
     }
+
     public User getDriver() {
         return driver;
     }

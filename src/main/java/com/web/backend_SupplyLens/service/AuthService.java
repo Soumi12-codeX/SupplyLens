@@ -5,7 +5,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.web.backend_SupplyLens.model.User;
+import com.web.backend_SupplyLens.model.Warehouse;
 import com.web.backend_SupplyLens.repository.UserRepository;
+import com.web.backend_SupplyLens.repository.WarehouseRepository;
 import com.web.backend_SupplyLens.security.JwtService;
 
 @Service
@@ -16,6 +18,9 @@ public class AuthService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private WarehouseRepository warehouseRepo;
 
     @Autowired
     private JwtService jwtService;
@@ -50,6 +55,12 @@ public class AuthService {
         }
         if(user.getPin() != null){
             user.setPin(passwordEncoder.encode(user.getPin()));
+        }
+        if("ADMIN".equals(user.getRole()) && user.getWarehouse() != null){
+            Long warehouseId = user.getWarehouse().getId();
+            Warehouse warehouse = warehouseRepo.findById(warehouseId).
+                orElseThrow(() -> new RuntimeException("Warehouse does not exists"));
+            user.setWarehouse(warehouse);
         }
         return userRepo.save(user);
     }

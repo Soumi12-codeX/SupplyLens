@@ -3,6 +3,7 @@ package com.web.backend_SupplyLens.service;
 import java.time.LocalDateTime;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import com.web.backend_SupplyLens.model.DriverLocation;
@@ -13,6 +14,9 @@ public class DriverService {
     @Autowired
     private DriverLocationRepository locationRepo;
 
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
     public void updateLocation(String driverId, double lat, double lng){
         DriverLocation loc = locationRepo.findByDriverId(driverId).orElse(new DriverLocation());
         loc.setDriverId(driverId);
@@ -20,5 +24,6 @@ public class DriverService {
         loc.setLongitude(lng);
         loc.setLastUpdated(LocalDateTime.now());
         locationRepo.save(loc);
+        messagingTemplate.convertAndSend("/topic/location" + driverId, loc);
     }
 }

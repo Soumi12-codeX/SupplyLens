@@ -1,6 +1,7 @@
 package com.web.backend_SupplyLens.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -23,14 +24,14 @@ public class User {
     @Column(unique = true)
     private String email; //only for admin
 
-    @JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     private String role;//admin or driver
 
     //for driver
     private String driverId;
-    @JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String pin;
 
     @ManyToOne

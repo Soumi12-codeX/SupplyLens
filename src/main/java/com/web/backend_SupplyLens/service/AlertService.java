@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import com.web.backend_SupplyLens.model.Alert;
@@ -27,6 +28,9 @@ public class AlertService {
     @Autowired
     private RouteOptionRepo routeOptionRepo;
 
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
     public Alert saveAlert(Alert alert){
         alert.setStatus(AlertStatus.PENDING);
         alert.setTime(LocalDateTime.now());
@@ -37,7 +41,9 @@ public class AlertService {
                 option.setStatus(RouteOptionStatus.PENDING);
             }
         }
-        return alertRepo.save(alert);
+        Alert saved = alertRepo.save(alert);
+        messagingTemplate.convertAndSend("/topic/alerts", saved);
+        return saved;
     }
 
     public List<Alert> getAllAlerts(){

@@ -12,4 +12,5 @@ import com.web.backend_SupplyLens.model.User;
 public interface TransportRepository extends JpaRepository<Transport, Long> {
 
     Optional<Transport> findByDriver(User driver);
+    Optional<Transport> findByTransportId(String transportId);
 }
