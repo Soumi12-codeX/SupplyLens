@@ -1,5 +1,9 @@
 package com.web.backend_SupplyLens.model;
 
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -14,6 +18,7 @@ public class Transport {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
+    @Column(name = "transport_id")
     private String transportId;
     
     @ManyToOne
@@ -23,6 +28,9 @@ public class Transport {
     private String status; //idle, in_transit, rerouted
 
     private String currentLocation;
+
+    private String currentRouteId;    
+    private String transportStatus;
 
     public String getTransportId() {
         return transportId;
@@ -55,5 +63,17 @@ public class Transport {
     }
     public void setCurrentLocation(String currentLocation) {
         this.currentLocation = currentLocation;
+    }
+    public String getCurrentRouteId() {
+        return currentRouteId;
+    }
+    public void setCurrentRouteId(String currentRouteId) {
+        this.currentRouteId = currentRouteId;
+    }
+    public String getTransportStatus() {
+        return transportStatus;
+    }
+    public void setTransportStatus(String transportStatus) {
+        this.transportStatus = transportStatus;
     }
 }

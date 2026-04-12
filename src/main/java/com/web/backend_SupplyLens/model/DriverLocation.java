@@ -2,6 +2,7 @@ package com.web.backend_SupplyLens.model;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -19,6 +20,9 @@ public class DriverLocation {
     private double latitude;
     private double longitude;
     private LocalDateTime lastUpdated;
+    
+
+    @Column(columnDefinition = "boolean default true")
     private boolean available; // true = no active shipment
 
     public Long getId() {

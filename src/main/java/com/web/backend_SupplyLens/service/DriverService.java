@@ -23,6 +23,10 @@ public class DriverService {
         loc.setLatitude(lat);
         loc.setLongitude(lng);
         loc.setLastUpdated(LocalDateTime.now());
+        if (loc.getId() == null) {
+            loc.setAvailable(true);
+        }
+
         locationRepo.save(loc);
         messagingTemplate.convertAndSend("/topic/location" + driverId, loc);
     }

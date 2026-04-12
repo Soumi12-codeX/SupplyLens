@@ -7,10 +7,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.web.backend_SupplyLens.model.DriverLocation;
+import com.web.backend_SupplyLens.model.Route;
 import com.web.backend_SupplyLens.model.Shipment;
+import com.web.backend_SupplyLens.model.Transport;
 import com.web.backend_SupplyLens.model.Warehouse;
 import com.web.backend_SupplyLens.repository.DriverLocationRepository;
+import com.web.backend_SupplyLens.repository.RouteOptionRepo;
+import com.web.backend_SupplyLens.repository.RouteRepository;
 import com.web.backend_SupplyLens.repository.ShipmentRepository;
+import com.web.backend_SupplyLens.repository.TransportRepository;
 import com.web.backend_SupplyLens.repository.WarehouseRepository;
 
 @Service
@@ -25,6 +30,12 @@ public class ShipmentService {
     @Autowired
     private WarehouseRepository warehouseRepo;
 
+    @Autowired
+    private TransportRepository transportRepo;
+
+    @Autowired
+    private RouteRepository routeRepo;
+
     public List<Shipment> getAllShipments() {
         return shipmentRepo.findAll();
     }
@@ -34,15 +45,39 @@ public class ShipmentService {
         shipment.setWarehouse(warehouse);
         shipment.setAssignmentStatus("UNASSIGNED");
 
+        if (shipment.getTransport() != null && shipment.getTransport().getId() != null) {
+            Transport transport = transportRepo.findById(shipment.getTransport().getId())
+                    .orElseThrow(() -> new RuntimeException("Transport not found"));
+            shipment.setTransport(transport);
+        }
+
+        if (shipment.getRoute() != null && shipment.getRoute().getId() != null) {
+            Route route = routeRepo.findById(shipment.getRoute().getId())
+                    .orElseThrow(() -> new RuntimeException("Route not found"));
+            shipment.setRoute(route);
+        }
+
         //find nearest drivers
         String nearestDriverId = findNearestDriver(
             warehouse.getLatitude(), 
             warehouse.getLongitude()
         );
-        locationRepo.findByDriverId(nearestDriverId).ifPresent(loc -> {
-            loc.setAvailable(false);
-            locationRepo.save(loc);
-        });
+
+        if (nearestDriverId != null) {
+            shipment.setAssignedDriverId(nearestDriverId);
+            shipment.setAssignmentStatus("ASSIGNED");
+            
+            locationRepo.findByDriverId(nearestDriverId).ifPresent(loc -> {
+                loc.setAvailable(false);
+                locationRepo.save(loc);
+            });
+        }
+        else {
+            // ✅ no drivers available — don't crash
+            shipment.setAssignmentStatus("UNASSIGNED");
+            shipment.setAssignedDriverId(null);
+        }
+        shipment.setRouteStatus("NORMAL");
         return shipmentRepo.save(shipment);
     }
 

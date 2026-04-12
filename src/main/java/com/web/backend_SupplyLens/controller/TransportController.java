@@ -18,10 +18,12 @@ import com.web.backend_SupplyLens.model.DriverLocation;
 import com.web.backend_SupplyLens.model.RouteOption;
 import com.web.backend_SupplyLens.model.Shipment;
 import com.web.backend_SupplyLens.model.Transport;
+import com.web.backend_SupplyLens.model.User;
 import com.web.backend_SupplyLens.repository.DriverLocationRepository;
 import com.web.backend_SupplyLens.repository.RouteOptionRepo;
 import com.web.backend_SupplyLens.repository.ShipmentRepository;
 import com.web.backend_SupplyLens.repository.TransportRepository;
+import com.web.backend_SupplyLens.repository.UserRepository;
 
 @RestController
 @RequestMapping("/api/transport")
@@ -38,8 +40,17 @@ public class TransportController {
     @Autowired
     private RouteOptionRepo routeOptionRepo;
 
+    @Autowired
+    private UserRepository userRepo;
+
     @PostMapping("/create")
     public ResponseEntity<?> createTransport(@RequestBody Transport transport) {
+        if (transport.getDriver() != null && transport.getDriver().getId() != null) {
+            User driver = userRepo.findById(transport.getDriver().getId())
+                    .orElseThrow(() -> new RuntimeException("Driver not found"));
+            transport.setDriver(driver);
+        }
+        transport.setTransportStatus("IDLE");
         return ResponseEntity.ok(transportRepo.save(transport));
     }
 
@@ -55,7 +66,7 @@ public class TransportController {
     }
 
     @GetMapping("/search/{transportId}")
-    public ResponseEntity<?> searchTransport(@PathVariable Long transportId){
+    public ResponseEntity<?> searchTransport(@PathVariable String transportId){
         Transport transport = transportRepo.findByTransportId(transportId).orElseThrow(()-> new RuntimeException("Transport not found"));
 
         //drivers current location
@@ -75,7 +86,7 @@ public class TransportController {
 
     //admin assigns a route to a transport
     @PostMapping("/{transportId}/assign-route/{routeOptionId}")
-    public ResponseEntity<?> assignRoute(@PathVariable Long transportId, @PathVariable Long routeOptionId){
+    public ResponseEntity<?> assignRoute(@PathVariable String transportId, @PathVariable Long routeOptionId){
         //find transport
         Transport transport = transportRepo.findByTransportId(transportId).orElseThrow(()-> new RuntimeException("Transport not found"));
 
@@ -89,8 +100,10 @@ public class TransportController {
             s.setRouteStatus("REROUTED");
             shipmentRepo.save(s);
         }
-        transport.setCurrentLocation(String.valueOf(routeOptionId));
-        transport.setStatus("REROUTED");
+        transport.setCurrentRouteId(String.valueOf(routeOptionId));
+        transport.setCurrentLocation(option.getPath());
+        transport.setTransportStatus("REROUTED");
+        transport.setStatus("IN_TRANSIT");
         transportRepo.save(transport);
 
         return ResponseEntity.ok("Route assigned to transport " + transportId);
