@@ -67,17 +67,17 @@ public class AlertService {
         updateShipments(alert, routeOptionId);
     }
 
-     private void updateShipments(Alert alert, Long selectedRouteId) {
+    private void updateShipments(Alert alert, Long selectedRouteId) {
         if (alert.getAffectedShipmentIds() == null) return;
         RouteOption selected = routeOptionRepo.findById(selectedRouteId).orElseThrow();
 
         for (String idStr : alert.getAffectedShipmentIds().split(",")) {
-            List<Shipment> shipments = shipmentRepo.findByAssignedDriverId(idStr.trim());
-            for (Shipment shipment : shipments) {
+            Long shipmentId = Long.parseLong(idStr.trim());
+            shipmentRepo.findById(shipmentId).ifPresent(shipment -> {
                 shipment.setCurrentPath(selected.getPath());
                 shipment.setRouteStatus("REROUTED");
                 shipmentRepo.save(shipment);
-            }
+            });
         }
     }
 
