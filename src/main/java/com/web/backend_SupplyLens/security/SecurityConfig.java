@@ -73,11 +73,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/warehouse/create").permitAll() // ✅ for setup
                         .requestMatchers("/api/alerts/from-python").permitAll()
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/driver/**").hasAnyRole("DRIVER", "ADMIN")
                         .requestMatchers("/api/shipments/**").hasRole("ADMIN")
                         .requestMatchers("/api/transport/**").hasRole("ADMIN")
                         .requestMatchers("/api/alerts/**").hasRole("ADMIN")
                         .requestMatchers("/api/warehouse/**").hasRole("ADMIN")
+                        .requestMatchers("/api/route/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

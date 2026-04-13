@@ -28,6 +28,6 @@ public class AdminController {
     }
     @GetMapping("/drivers/available")
     public List<User> getAvailableDrivers() {
-        return userRepository.findByRoleAndStatus("DRIVER", "AVAILABLE");
+        return userRepository.findByRole("DRIVER");
     }
 }

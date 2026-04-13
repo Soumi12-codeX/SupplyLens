@@ -12,5 +12,5 @@ import com.web.backend_SupplyLens.model.User;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     Optional<User> findByDriverId(String driverId);
-    List<User> findByRoleAndStatus(String role, String status);
+    List<User> findByRole(String role);
 }
