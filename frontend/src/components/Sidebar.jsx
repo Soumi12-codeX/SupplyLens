@@ -11,7 +11,6 @@ export default function Sidebar({ collapsed, onToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-
   const isAdmin = user?.role === 'admin';
 
   const adminLinks = [
@@ -38,9 +37,8 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <div
-      className={`h-full flex flex-col border-r border-white/5 bg-slate-950/80 backdrop-blur-md transition-all duration-300 ${
-        collapsed ? 'w-16' : 'w-60'
-      }`}
+      className={`h-full flex flex-col border-r border-white/5 bg-slate-950/80 backdrop-blur-md transition-all duration-300 ${collapsed ? 'w-16' : 'w-60'
+        }`}
     >
       {/* Header */}
       <div className="p-4 flex items-center justify-between border-b border-white/5">
@@ -60,18 +58,19 @@ export default function Sidebar({ collapsed, onToggle }) {
       {/* Nav Links */}
       <nav className="flex-1 p-3 space-y-1">
         {links.map((link) => {
-          const isActive = location.pathname === link.path;
+          const isActive = location.pathname.startsWith(link.path);
           const Icon = link.icon;
 
           return (
             <button
               key={link.label}
-              onClick={() => navigate(link.path)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                isActive
+              onClick={() => {
+                navigate(link.path);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
                   ? 'bg-neon-blue/10 text-neon-blue border border-neon-blue/15'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
+                }`}
               title={collapsed ? link.label : undefined}
             >
               <Icon size={18} className="shrink-0" />

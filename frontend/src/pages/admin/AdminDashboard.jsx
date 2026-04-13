@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchShipments = async () => {
       try {
-        const res = await api.get("/shipments");
+        const res = await api.get("/admin/shipments");
         setShipments(res.data);
       } catch (err) {
         console.error(err);
@@ -69,12 +69,6 @@ export default function AdminDashboard() {
         route: []
       }));
   };
-
-
-  // Start mock simulator
-  useEffect(() => {
-    fetchShipments();
-  }, []);
 
   const fetchShipments = async () => {
     try {
