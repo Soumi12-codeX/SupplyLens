@@ -3,6 +3,7 @@ import Sidebar from '../../components/Sidebar';
 import { Package, MapPin, Truck, User, Weight, Hash, FileText, ChevronDown, CheckCircle, ArrowRight, Sparkles, Box, Send } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { WAREHOUSES, DELIVERY_LOCATIONS } from '../../services/mockData';
+import api from '../../services/api';
 
 const MOCK_DRIVERS = [
   { id: 'drv-001', name: 'Rajesh Kumar', phone: '+91 9812345678', status: 'available', trips: 142, rating: 4.8 },
@@ -33,7 +34,9 @@ export default function CreateShipment() {
   const [submitted, setSubmitted] = useState(false);
 
   // Form state
-  const [pickupWarehouse, setPickupWarehouse] = useState(user?.warehouseId || '');
+  const [pickupWarehouse, setPickupWarehouse] = useState(
+    user?.warehouse?.id || ''
+  );
   const [deliveryLocation, setDeliveryLocation] = useState('');
   const [selectedDriver, setSelectedDriver] = useState('');
   const [cargoType, setCargoType] = useState('');
@@ -60,11 +63,38 @@ export default function CreateShipment() {
   };
 
   const handleSubmit = async () => {
+  try {
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setIsSubmitting(false);
+
+    const payload = {
+      transport: {
+        type: cargoType,
+        weight,
+        quantity
+      },
+      route: {
+        source: selectedPickup?.name,
+        destination: selectedDelivery?.name
+      },
+      assignedDriverId: selectedDriver,
+      status: "CREATED",
+      assignmentStatus: "UNASSIGNED"
+    };
+
+    const res = await api.post(
+      `/shipments/create?warehouseId=${user?.warehouse?.id}`, // 🔴 IMPORTANT
+      payload
+    );
+
+    console.log("Shipment created:", res.data);
+
     setSubmitted(true);
-  };
+  } catch (err) {
+    console.error("Error creating shipment:", err);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const resetForm = () => {
     setCurrentStep(1);
@@ -79,7 +109,11 @@ export default function CreateShipment() {
     setSubmitted(false);
   };
 
-  const selectedPickup = WAREHOUSES.find((w) => w.id === pickupWarehouse);
+  const selectedPickup = {
+    id: user?.warehouse?.id,
+    name: user?.warehouse?.name,
+    address: user?.warehouse?.address
+  };
   const selectedDelivery = DELIVERY_LOCATIONS.find((d) => d.id === deliveryLocation);
   const selectedDriverData = MOCK_DRIVERS.find((d) => d.id === selectedDriver);
   const selectedPriority = PRIORITY_LEVELS.find((p) => p.value === priority);

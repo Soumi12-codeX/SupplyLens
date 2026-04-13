@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Shield, Truck, Eye, EyeOff, ArrowLeft, UserPlus, Box } from 'lucide-react';
-import { WAREHOUSES } from '../services/mockData';
+import api from '../services/api.js';
 
 export default function RegisterPage() {
   const [selectedRole, setSelectedRole] = useState(null);
@@ -10,35 +10,75 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [driverId, setDriverId] = useState('');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [warehouseId, setWarehouseId] = useState('');
+  const [warehouses, setWarehouses] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
+
+  // fetch warehouses for admin dropdown
+  useEffect(() => {
+    api.get('/warehouse/all')
+      .then(res => setWarehouses(res.data))
+      .catch(() => setError('Failed to load warehouses'));
+  }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
+    // validations
+    if (selectedRole === 'admin') {
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        return;
+      }
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters');
+        return;
+      }
+      if (!warehouseId) {
+        setError('Please select a warehouse');
+        return;
+      }
+    } else {
+      if (pin !== confirmPin) {
+        setError('PINs do not match');
+        return;
+      }
+      if (pin.length < 4) {
+        setError('PIN must be at least 4 characters');
+        return;
+      }
+      if (!driverId) {
+        setError('Driver ID is required');
+        return;
+      }
     }
 
     setIsLoading(true);
 
-    // Simulate registration delay
-    await new Promise((r) => setTimeout(r, 1500));
+    const result = await register(selectedRole, {
+      name,
+      email,
+      password,
+      warehouseId,
+      driverId,
+      pin
+    });
 
-    login(selectedRole, { email, name, warehouseId });
     setIsLoading(false);
-    navigate(selectedRole === 'admin' ? '/admin' : '/driver');
+
+    if (result.success) {
+      navigate('/login');
+    } else {
+      setError(result.message);
+    }
   };
 
   return (
@@ -57,20 +97,20 @@ export default function RegisterPage() {
         {selectedRole ? 'Back' : 'Home'}
       </button>
 
-      {/* Already have an account */}
+      {/* Already have account */}
       <button
         onClick={() => navigate('/login')}
         className="absolute top-6 right-6 text-slate-400 hover:text-neon-blue transition-colors text-sm z-10"
       >
-        Already have an account? <span className="text-neon-blue font-medium">Sign In</span>
+        Already have an account?{' '}
+        <span className="text-neon-blue font-medium">Sign In</span>
       </button>
 
       <div className="w-full max-w-lg">
         {/* Logo */}
         <div className="text-center mb-10">
           <h1 className="font-outfit text-3xl font-bold text-white mb-2">
-            Supply
-            <span className="text-neon-blue">Lens</span>
+            Supply<span className="text-neon-blue">Lens</span>
           </h1>
           <p className="text-slate-400 text-sm">
             {selectedRole
@@ -82,7 +122,6 @@ export default function RegisterPage() {
         {!selectedRole ? (
           /* Role Selection */
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 animate-fade-in-up">
-            {/* Admin Card */}
             <button
               onClick={() => setSelectedRole('admin')}
               className="group relative p-8 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm hover:border-neon-blue/50 hover:bg-white/8 transition-all duration-500 text-left overflow-hidden"
@@ -99,7 +138,6 @@ export default function RegisterPage() {
               </div>
             </button>
 
-            {/* Driver Card */}
             <button
               onClick={() => setSelectedRole('driver')}
               className="group relative p-8 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm hover:border-neon-purple/50 hover:bg-white/8 transition-all duration-500 text-left overflow-hidden"
@@ -144,31 +182,6 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* Warehouse Selection (Admin Only) */}
-            {selectedRole === 'admin' && (
-              <div className="mb-5">
-                <label className="flex items-center gap-2 text-slate-400 text-sm mb-2">
-                  <Box size={14} className="text-neon-blue" />
-                  Select Warehouse
-                </label>
-                <div className="relative">
-                  <select
-                    value={warehouseId}
-                    onChange={(e) => setWarehouseId(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm appearance-none"
-                    required
-                  >
-                    <option value="" className="bg-slate-900">Choose a warehouse...</option>
-                    {WAREHOUSES.map((wh) => (
-                      <option key={wh.id} value={wh.id} className="bg-slate-900">
-                        {wh.name} ({wh.city})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
             {/* Full Name */}
             <div className="mb-5">
               <label className="block text-slate-400 text-sm mb-2">Full Name</label>
@@ -182,53 +195,126 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* Email */}
-            <div className="mb-5">
-              <label className="block text-slate-400 text-sm mb-2">Email</label>
-              <input
-                type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@supplylens.com"
-                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
-                required
-              />
-            </div>
+            {/* ADMIN FIELDS */}
+            {selectedRole === 'admin' && (
+              <>
+                {/* Warehouse */}
+                <div className="mb-5">
+                  <label className="flex items-center gap-2 text-slate-400 text-sm mb-2">
+                    <Box size={14} className="text-neon-blue" />
+                    Select Warehouse
+                  </label>
+                  <select
+                    value={warehouseId}
+                    onChange={(e) => setWarehouseId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm appearance-none"
+                    required
+                  >
+                    <option value="" className="bg-slate-900">Choose a warehouse...</option>
+                    {warehouses.map((wh) => (
+                      <option key={wh.id} value={wh.id} className="bg-slate-900">
+                        {wh.name} ({wh.city})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* Password */}
-            <div className="mb-5">
-              <label className="block text-slate-400 text-sm mb-2">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm pr-12"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
+                {/* Email */}
+                <div className="mb-5">
+                  <label className="block text-slate-400 text-sm mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@supplylens.com"
+                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
+                    required
+                  />
+                </div>
 
-            {/* Confirm Password */}
-            <div className="mb-7">
-              <label className="block text-slate-400 text-sm mb-2">Confirm Password</label>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
-                required
-              />
-            </div>
+                {/* Password */}
+                <div className="mb-5">
+                  <label className="block text-slate-400 text-sm mb-2">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm pr-12"
+                      required
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm Password */}
+                <div className="mb-7">
+                  <label className="block text-slate-400 text-sm mb-2">Confirm Password</label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {/* DRIVER FIELDS */}
+            {selectedRole === 'driver' && (
+              <>
+                {/* Driver ID */}
+                <div className="mb-5">
+                  <label className="block text-slate-400 text-sm mb-2">Driver ID</label>
+                  <input
+                    type="text"
+                    value={driverId}
+                    onChange={(e) => setDriverId(e.target.value)}
+                    placeholder="DRV-001"
+                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-purple/50 focus:ring-1 focus:ring-neon-purple/25 transition-all text-sm"
+                    required
+                  />
+                </div>
+
+                {/* PIN */}
+                <div className="mb-5">
+                  <label className="block text-slate-400 text-sm mb-2">PIN</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value)}
+                      placeholder="••••"
+                      className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-purple/50 focus:ring-1 focus:ring-neon-purple/25 transition-all text-sm pr-12"
+                      required
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm PIN */}
+                <div className="mb-7">
+                  <label className="block text-slate-400 text-sm mb-2">Confirm PIN</label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value)}
+                    placeholder="••••"
+                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-purple/50 focus:ring-1 focus:ring-neon-purple/25 transition-all text-sm"
+                    required
+                  />
+                </div>
+              </>
+            )}
 
             {/* Submit */}
             <button

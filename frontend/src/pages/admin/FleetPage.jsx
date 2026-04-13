@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
-import { MockSimulator } from '../../services/mockData';
+import api from '../../services/api';
 import {
   Truck, Search, MapPin, Clock, Gauge, Package,
   Phone, AlertTriangle, Filter, ArrowUpDown,
@@ -14,14 +14,60 @@ export default function FleetPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('id');
 
+  const [vehicles, setVehicles] = useState([]);
+
   useEffect(() => {
-    const sim = new MockSimulator(
-      (updatedFleet) => setFleet(updatedFleet),
-      (alert) => setAlerts((prev) => [alert, ...prev].slice(0, 20))
-    );
-    sim.start();
-    return () => sim.stop();
+    const fetchVehicles = async () => {
+      try {
+        const res = await api.get("/vehicles"); // or /drivers
+        setVehicles(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchVehicles();
   }, []);
+
+  const transformShipments = (shipments) => {
+    return shipments
+      .filter(s => s.assignmentStatus === "ASSIGNED" || s.assignmentStatus === "IN_PROGRESS")
+      .map((s, index) => ({
+        id: `TRK-${s.id}`,
+        driver: s.assignedDriverId || "Not Assigned",
+        originName: s.route?.source || "Warehouse",
+        destinationName: s.route?.destination || "Destination",
+        cargo: s.transport?.type || "Goods",
+        status: s.assignmentStatus === "DELIVERED" ? "delayed" : "on-route",
+        speed: 50,
+        progress: 0.3,
+        eta: "5h",
+        distanceRemaining: "200 km",
+
+        // TEMP STATIC LOCATION (we'll fix later with live tracking)
+        currentPosition: {
+          lat: 20.5937 + Math.random(),
+          lng: 78.9629 + Math.random(),
+        },
+
+        route: []
+      }));
+  };
+
+  useEffect(() => {
+    fetchShipments();
+  }, []);
+
+  const fetchShipments = async () => {
+    try {
+      const res = await api.get('/admin/shipments');
+      const transformed = transformShipments(res.data);
+      setFleet(transformed);
+    } catch (err) {
+      console.error(err);
+      setFleet([]);
+    }
+  };
 
   const filtered = fleet
     .filter((t) => {
@@ -96,11 +142,10 @@ export default function FleetPage() {
                   <button
                     key={status}
                     onClick={() => setFilterStatus(status)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-300 ${
-                      filterStatus === status
-                        ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
-                        : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
-                    }`}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-300 ${filterStatus === status
+                      ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
+                      : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
+                      }`}
                   >
                     {status === 'all' ? 'All' : status === 'on-route' ? 'On Route' : 'Delayed'}
                   </button>
@@ -112,11 +157,10 @@ export default function FleetPage() {
                   <button
                     key={s}
                     onClick={() => setSortBy(s)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-300 ${
-                      sortBy === s
-                        ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
-                        : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
-                    }`}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-300 ${sortBy === s
+                      ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
+                      : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
+                      }`}
                   >
                     {s === 'id' ? 'ID' : s.charAt(0).toUpperCase() + s.slice(1)}
                   </button>
@@ -132,11 +176,10 @@ export default function FleetPage() {
                 return (
                   <div
                     key={truck.id}
-                    className={`group p-5 rounded-xl border transition-all duration-300 ${
-                      truck.status === 'delayed'
-                        ? 'bg-red-500/3 border-red-500/15 hover:border-red-500/30'
-                        : 'bg-white/3 border-white/8 hover:border-white/15'
-                    } hover:bg-white/5`}
+                    className={`group p-5 rounded-xl border transition-all duration-300 ${truck.status === 'delayed'
+                      ? 'bg-red-500/3 border-red-500/15 hover:border-red-500/30'
+                      : 'bg-white/3 border-white/8 hover:border-white/15'
+                      } hover:bg-white/5`}
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between mb-3">
@@ -149,11 +192,10 @@ export default function FleetPage() {
                         </div>
                         <span className="text-white font-semibold text-sm">{truck.id}</span>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        truck.status === 'delayed'
-                          ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      }`}>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${truck.status === 'delayed'
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        }`}>
                         {truck.status === 'delayed' ? 'Delayed' : 'On Route'}
                       </span>
                     </div>
@@ -185,11 +227,10 @@ export default function FleetPage() {
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-1000 ${
-                            truck.status === 'delayed'
-                              ? 'bg-gradient-to-r from-red-500 to-orange-400'
-                              : 'bg-gradient-to-r from-neon-blue to-brand-primary'
-                          }`}
+                          className={`h-full rounded-full transition-all duration-1000 ${truck.status === 'delayed'
+                            ? 'bg-gradient-to-r from-red-500 to-orange-400'
+                            : 'bg-gradient-to-r from-neon-blue to-brand-primary'
+                            }`}
                           style={{ width: `${progress}%` }}
                         />
                       </div>

@@ -7,13 +7,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.web.backend_SupplyLens.dto.AuthResponse;
 import com.web.backend_SupplyLens.model.User;
 import com.web.backend_SupplyLens.service.AuthService;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    
+
     @Autowired
     private AuthService authService;
 
@@ -23,18 +24,18 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public User register(@RequestBody User user){
+    public User register(@RequestBody User user) {
         System.out.println("REGISTER HIT");
         return authService.register(user);
     }
 
     @PostMapping("/admin/login")
-    public String adminLogin(@RequestBody User user){
+    public AuthResponse adminLogin(@RequestBody User user) {
         return authService.adminLogin(user.getEmail(), user.getPassword());
     }
 
     @PostMapping("/driver/login")
-    public String driverLogin(@RequestBody User user){
+    public String driverLogin(@RequestBody User user) {
         return authService.driverLogin(user.getDriverId(), user.getPin());
     }
 }

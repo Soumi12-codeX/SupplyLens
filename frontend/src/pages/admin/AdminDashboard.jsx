@@ -6,8 +6,8 @@ import RouteOverlay from '../../components/Map/RouteOverlay';
 import RoadConditionOverlay from '../../components/Map/RoadConditionOverlay';
 import TruckList from './TruckList';
 import TruckDetail from './TruckDetail';
-import AINotification from '../../components/AINotification';
-import { MockSimulator } from '../../services/mockData';
+import api from '../../services/api';
+import AINotification from '../../components/AINotification.jsx';
 import {
   Truck, AlertTriangle, Activity, Clock,
   CheckCircle, X, ChevronDown, ChevronUp,
@@ -15,9 +15,9 @@ import {
 
 // Severity config for the feed bar
 const SEV = {
-  critical: { bg: 'bg-red-500/10',    border: 'border-red-500/30',    text: 'text-red-400',    dot: 'bg-red-500',    label: 'Critical' },
-  high:     { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400', dot: 'bg-orange-400', label: 'High' },
-  medium:   { bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400', dot: 'bg-yellow-400', label: 'Medium' },
+  critical: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', dot: 'bg-red-500', label: 'Critical' },
+  high: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400', dot: 'bg-orange-400', label: 'High' },
+  medium: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400', dot: 'bg-yellow-400', label: 'Medium' },
 };
 
 export default function AdminDashboard() {
@@ -31,16 +31,61 @@ export default function AdminDashboard() {
   const [showTruckList, setShowTruckList] = useState(true);
   const [alertFeedOpen, setAlertFeedOpen] = useState(true);
 
+  const [shipments, setShipments] = useState([]);
+
+  useEffect(() => {
+    const fetchShipments = async () => {
+      try {
+        const res = await api.get("/shipments");
+        setShipments(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchShipments();
+  }, []);
+
+  const transformShipments = (shipments) => {
+    return shipments
+      .filter(s => s.assignmentStatus === "IN_PROGRESS" && s.assignedDriverId)
+      .map((s, index) => ({
+        id: `TRK-${s.id}`,
+        driver: s.assignedDriverId || "Not Assigned",
+        originName: s.route?.source || "Warehouse",
+        destinationName: s.route?.destination || "Destination",
+        cargo: s.transport?.type || "Goods",
+        status: s.assignmentStatus === "IN_PROGRESS" ? "on-route" : "delayed",
+        speed: 50,
+        progress: 0.3,
+        eta: "5h",
+        distanceRemaining: "200 km",
+
+        currentPosition: {
+          lat: 20.5937 + Math.random(),
+          lng: 78.9629 + Math.random(),
+        },
+
+        route: []
+      }));
+  };
+
+
   // Start mock simulator
   useEffect(() => {
-    const sim = new MockSimulator(
-      (updatedFleet) => setFleet(updatedFleet),
-      (alert) => setAlerts((prev) => [alert, ...prev].slice(0, 20)),
-      (condition) => setRoadConditions((prev) => [condition, ...prev].slice(0, 20))
-    );
-    sim.start();
-    return () => sim.stop();
+    fetchShipments();
   }, []);
+
+  const fetchShipments = async () => {
+    try {
+      const res = await api.get('/admin/shipments'); // YOUR endpoint
+      const transformed = transformShipments(res.data);
+      setFleet(transformed);
+    } catch (err) {
+      console.error("Error fetching shipments", err);
+      setFleet([]); // no shipments = no trucks
+    }
+  };
 
   const handleSelectTruck = useCallback((truck) => {
     setSelectedTruck(truck);
@@ -58,17 +103,17 @@ export default function AdminDashboard() {
   };
 
   const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
-  const highCount     = alerts.filter((a) => a.severity === 'high').length;
-  const blockedRoads  = roadConditions.filter((c) => c.condition === 'blocked').length;
+  const highCount = alerts.filter((a) => a.severity === 'high').length;
+  const blockedRoads = roadConditions.filter((c) => c.condition === 'blocked').length;
   const congestedRoads = roadConditions.filter((c) => c.condition !== 'blocked').length;
 
   const stats = [
-    { label: 'Active Trucks',  value: fleet.filter((t) => t.status === 'on-route').length, icon: Truck,          color: 'text-neon-blue'  },
-    { label: 'Delayed',        value: fleet.filter((t) => t.status === 'delayed').length,  icon: AlertTriangle,  color: 'text-red-400'    },
-    { label: 'Open Alerts',    value: alerts.length,                                        icon: Activity,       color: 'text-orange-400' },
-    { label: 'Avg Speed',      value: fleet.length ? `${Math.floor(fleet.reduce((s, t) => s + t.speed, 0) / fleet.length)} km/h` : '—', icon: Clock, color: 'text-emerald-400' },
-    { label: 'Roads Blocked',  value: blockedRoads,                                         icon: AlertTriangle,  color: 'text-red-500'    },
-    { label: 'Congested',      value: congestedRoads,                                       icon: Activity,       color: 'text-yellow-400' },
+    { label: 'Active Trucks', value: fleet.filter((t) => t.status === 'on-route').length, icon: Truck, color: 'text-neon-blue' },
+    { label: 'Delayed', value: fleet.filter((t) => t.status === 'delayed').length, icon: AlertTriangle, color: 'text-red-400' },
+    { label: 'Open Alerts', value: alerts.length, icon: Activity, color: 'text-orange-400' },
+    { label: 'Avg Speed', value: fleet.length ? `${Math.floor(fleet.reduce((s, t) => s + t.speed, 0) / fleet.length)} km/h` : '—', icon: Clock, color: 'text-emerald-400' },
+    { label: 'Roads Blocked', value: blockedRoads, icon: AlertTriangle, color: 'text-red-500' },
+    { label: 'Congested', value: congestedRoads, icon: Activity, color: 'text-yellow-400' },
   ];
 
   return (

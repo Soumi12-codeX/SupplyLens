@@ -1,29 +1,123 @@
-import React, { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import api from '../services/api.js';
 
-const AuthContext = createContext(null);
+const AuthContext = createContext();
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(() => {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    const name = localStorage.getItem('name');
+    const driverId = localStorage.getItem('driverId');
+    const warehouse = JSON.parse(localStorage.getItem('warehouse'));
 
-  const login = (role, userData) => {
-    setUser({ role, ...userData });
+    return token ? { token, role, name, driverId, warehouse } : null;
+  });
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    setUser({
+      token,
+      role: localStorage.getItem('role'),
+      name: localStorage.getItem('name'),
+      warehouse: JSON.parse(localStorage.getItem('warehouse'))
+    });
+
+    setLoading(false);
+  }, []);
+  // ✅ keeps same signature your LoginPage uses: login(role, data)
+  const login = async (role, data) => {
+    try {
+      let token;
+      if (role === 'admin') {
+        const res = await api.post('/auth/admin/login', {
+          email: data.email,
+          password: data.password
+        });
+
+        const token = res.data.token;
+        const userData = res.data.user;
+
+        localStorage.setItem('token', token);
+        localStorage.setItem('role', 'admin');
+        localStorage.setItem('name', userData.username);
+
+        // ✅ STORE WAREHOUSE
+        localStorage.setItem('warehouse', JSON.stringify(userData.warehouse));
+
+        setUser({
+          token,
+          role: 'admin',
+          name: userData.username,
+          warehouse: userData.warehouse
+        });
+      } else {
+        const res = await api.post('/auth/driver/login', {
+          driverId: data.driverId,
+          pin: data.pin
+        });
+        token = res.data;
+        localStorage.setItem('token', token);
+        localStorage.setItem('role', 'driver');
+        localStorage.setItem('driverId', data.driverId);
+        localStorage.setItem('name', data.name || 'Driver');
+      }
+      setUser({ token, role, ...data });
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.response?.data || 'Invalid credentials'
+      };
+    }
+  };
+
+  const register = async (role, data) => {
+    try {
+      const payload = role === 'admin'
+        ? {
+          username: data.name,
+          email: data.email,
+          password: data.password,
+          role: 'ADMIN',
+          warehouse: { id: parseInt(data.warehouseId) }
+        }
+        : {
+          username: data.name,
+          driverId: data.driverId,
+          pin: data.pin,
+          role: 'DRIVER'
+        };
+
+      await api.post('/auth/register', payload);
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.response?.data || 'Registration failed'
+      };
+    }
   };
 
   const logout = () => {
+    localStorage.clear();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, register, logout,loading }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-}
-
-export default AuthContext;
+export const useAuth = () => useContext(AuthContext);

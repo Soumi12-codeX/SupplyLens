@@ -16,7 +16,7 @@ import com.web.backend_SupplyLens.model.Alert;
 import com.web.backend_SupplyLens.service.AlertService;
 
 @RestController
-@RequestMapping("api/alerts")
+@RequestMapping("/api/alerts")
 public class AlertController {
     
     @Autowired
