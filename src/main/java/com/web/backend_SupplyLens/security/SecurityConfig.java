@@ -1,5 +1,6 @@
 package com.web.backend_SupplyLens.security;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,6 +15,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.web.backend_SupplyLens.repository.UserRepository;
+
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.Arrays;
@@ -22,7 +25,12 @@ import java.util.Arrays;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    @Autowired
+    private UserRepository userRepository;
 
+    @Autowired
+    private JwtService jwtService;
+   
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -31,7 +39,7 @@ public class SecurityConfig {
     
     @Bean
     public JwtFilter jwtFilter(JwtService jwtService) {
-        return new JwtFilter(jwtService);
+        return new JwtFilter(jwtService, userRepository);
     }
 
     @Bean

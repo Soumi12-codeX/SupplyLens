@@ -45,6 +45,12 @@ export default function CreateShipment() {
   const [priority, setPriority] = useState('standard');
   const [notes, setNotes] = useState('');
 
+  const [routes, setRoutes] = useState([]);
+
+  useEffect(() => {
+    api.get('/routes').then(res => setRoutes(res.data));
+  }, []);
+
   const steps = [
     { num: 1, label: 'Route', icon: MapPin },
     { num: 2, label: 'Package', icon: Package },
@@ -63,38 +69,33 @@ export default function CreateShipment() {
   };
 
   const handleSubmit = async () => {
-  try {
-    setIsSubmitting(true);
+    try {
+      setIsSubmitting(true);
 
-    const payload = {
-      transport: {
-        type: cargoType,
-        weight,
-        quantity
-      },
-      route: {
-        source: selectedPickup?.name,
-        destination: selectedDelivery?.name
-      },
-      assignedDriverId: selectedDriver,
-      status: "CREATED",
-      assignmentStatus: "UNASSIGNED"
-    };
+      const payload = {
+        status: "PENDING",
+        route: {
+          id: selectRouteId
+        },
+        transport: {
+          id: 1
+        }
+      };
 
-    const res = await api.post(
-      `/shipments/create?warehouseId=${user?.warehouse?.id}`, // 🔴 IMPORTANT
-      payload
-    );
+      const res = await api.post(
+        `/shipments/create?warehouseId=${user?.warehouse?.id}`,
+        payload
+      );
 
-    console.log("Shipment created:", res.data);
+      console.log("Shipment created:", res.data);
 
-    setSubmitted(true);
-  } catch (err) {
-    console.error("Error creating shipment:", err);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Error creating shipment:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const resetForm = () => {
     setCurrentStep(1);
@@ -152,21 +153,19 @@ export default function CreateShipment() {
                   <React.Fragment key={step.num}>
                     <button
                       onClick={() => isCompleted && setCurrentStep(step.num)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-                        isActive
-                          ? 'bg-neon-blue/15 text-neon-blue border border-neon-blue/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]'
-                          : isCompleted
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${isActive
+                        ? 'bg-neon-blue/15 text-neon-blue border border-neon-blue/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]'
+                        : isCompleted
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-pointer'
                           : 'bg-white/3 text-slate-500 border border-white/5'
-                      }`}
+                        }`}
                     >
                       {isCompleted ? <CheckCircle size={16} /> : <Icon size={16} />}
                       <span className="hidden sm:inline">{step.label}</span>
                     </button>
                     {i < steps.length - 1 && (
-                      <div className={`w-12 h-px mx-2 transition-colors duration-300 ${
-                        currentStep > step.num ? 'bg-emerald-500/40' : 'bg-white/10'
-                      }`} />
+                      <div className={`w-12 h-px mx-2 transition-colors duration-300 ${currentStep > step.num ? 'bg-emerald-500/40' : 'bg-white/10'
+                        }`} />
                     )}
                   </React.Fragment>
                 );
@@ -239,11 +238,10 @@ export default function CreateShipment() {
                           <button
                             key={dl.id}
                             onClick={() => setDeliveryLocation(dl.id)}
-                            className={`p-4 rounded-xl border text-left transition-all duration-300 ${
-                              deliveryLocation === dl.id
-                                ? 'bg-red-500/10 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
-                                : 'bg-white/3 border-white/8 hover:bg-white/5 hover:border-white/15'
-                            }`}
+                            className={`p-4 rounded-xl border text-left transition-all duration-300 ${deliveryLocation === dl.id
+                              ? 'bg-red-500/10 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
+                              : 'bg-white/3 border-white/8 hover:bg-white/5 hover:border-white/15'
+                              }`}
                           >
                             <p className={`text-sm font-semibold mb-1 ${deliveryLocation === dl.id ? 'text-red-400' : 'text-white'}`}>
                               {dl.name}
@@ -327,11 +325,10 @@ export default function CreateShipment() {
                             <button
                               key={p.value}
                               onClick={() => setPriority(p.value)}
-                              className={`flex-1 py-2.5 rounded-lg text-xs font-medium border transition-all duration-300 ${
-                                priority === p.value
-                                  ? `${p.bg} ${p.border} ${p.color}`
-                                  : 'bg-white/3 border-white/8 text-slate-500 hover:bg-white/5'
-                              }`}
+                              className={`flex-1 py-2.5 rounded-lg text-xs font-medium border transition-all duration-300 ${priority === p.value
+                                ? `${p.bg} ${p.border} ${p.color}`
+                                : 'bg-white/3 border-white/8 text-slate-500 hover:bg-white/5'
+                                }`}
                             >
                               {p.label}
                             </button>
@@ -374,22 +371,20 @@ export default function CreateShipment() {
                             key={driver.id}
                             onClick={() => isAvailable && setSelectedDriver(driver.id)}
                             disabled={!isAvailable}
-                            className={`w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all duration-300 ${
-                              isSelected
-                                ? 'bg-neon-blue/10 border-neon-blue/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]'
-                                : isAvailable
+                            className={`w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all duration-300 ${isSelected
+                              ? 'bg-neon-blue/10 border-neon-blue/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]'
+                              : isAvailable
                                 ? 'bg-white/3 border-white/8 hover:bg-white/5 hover:border-white/15'
                                 : 'bg-white/2 border-white/5 opacity-50 cursor-not-allowed'
-                            }`}
+                              }`}
                           >
                             {/* Avatar */}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${
-                              isSelected
-                                ? 'bg-neon-blue/20 text-neon-blue'
-                                : isAvailable
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold ${isSelected
+                              ? 'bg-neon-blue/20 text-neon-blue'
+                              : isAvailable
                                 ? 'bg-white/5 text-white'
                                 : 'bg-white/3 text-slate-600'
-                            }`}>
+                              }`}>
                               {driver.name.split(' ').map(n => n[0]).join('')}
                             </div>
 
@@ -398,11 +393,10 @@ export default function CreateShipment() {
                                 <p className={`text-sm font-semibold ${isSelected ? 'text-neon-blue' : 'text-white'}`}>
                                   {driver.name}
                                 </p>
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                                  isAvailable
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                    : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
-                                }`}>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${isAvailable
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                                  }`}>
                                   {isAvailable ? 'Available' : 'On Route'}
                                 </span>
                               </div>
@@ -499,11 +493,10 @@ export default function CreateShipment() {
                 <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
                   <button
                     onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-                    className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      currentStep === 1
-                        ? 'text-slate-600 cursor-not-allowed'
-                        : 'text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10'
-                    }`}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${currentStep === 1
+                      ? 'text-slate-600 cursor-not-allowed'
+                      : 'text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10'
+                      }`}
                     disabled={currentStep === 1}
                   >
                     Back
@@ -513,11 +506,10 @@ export default function CreateShipment() {
                     <button
                       onClick={() => setCurrentStep(currentStep + 1)}
                       disabled={!canProceed()}
-                      className={`px-6 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all duration-300 ${
-                        canProceed()
-                          ? 'bg-neon-blue/15 text-neon-blue border border-neon-blue/30 hover:bg-neon-blue/25 hover:shadow-[0_0_20px_rgba(0,240,255,0.15)]'
-                          : 'bg-white/5 text-slate-600 border border-white/5 cursor-not-allowed'
-                      }`}
+                      className={`px-6 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all duration-300 ${canProceed()
+                        ? 'bg-neon-blue/15 text-neon-blue border border-neon-blue/30 hover:bg-neon-blue/25 hover:shadow-[0_0_20px_rgba(0,240,255,0.15)]'
+                        : 'bg-white/5 text-slate-600 border border-white/5 cursor-not-allowed'
+                        }`}
                     >
                       Continue
                       <ArrowRight size={16} />
