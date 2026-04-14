@@ -1,10 +1,14 @@
 package com.web.backend_SupplyLens.service;
 
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import com.web.backend_SupplyLens.model.DriverLocation;
 import com.web.backend_SupplyLens.model.Route;
@@ -102,5 +106,18 @@ public class ShipmentService {
                 * Math.cos(Math.toRadians(lat2)) 
                 * Math.sin(dLng / 2) * Math.sin(dLng / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    public void syncRouteWithPython(Shipment shipment){
+        RestTemplate rest = new RestTemplate();
+        String url = "http://localhost:5000/api/sync-watchlist";
+
+        List<String> nodes = Arrays.asList(shipment.getRoute().getRouteNodes().split(", "));
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("shipmentId", shipment.getId());
+        body.put("nodes", nodes);
+
+        rest.postForEntity(url, body, String.class);
     }
 }

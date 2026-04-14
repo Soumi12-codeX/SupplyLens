@@ -2,6 +2,7 @@ package com.web.backend_SupplyLens.model;
 
 import java.time.LocalTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -20,6 +21,8 @@ public class Route {
     private LocalTime estimatedTime;
     private String riskLevel; //low, medium, high
     private String status; //active, rerouted, blocked
+    @Column(name = "route_nodes", columnDefinition="TEXT")
+    private String routeNodes; //Stores "Mumbai, Pune, Bangalore"
 
     public Long getId() {
         return id;
@@ -62,5 +65,11 @@ public class Route {
     }
     public void setStatus(String status) {
         this.status = status;
+    }
+    public String getRouteNodes(){
+        return routeNodes;
+    }
+    public void setRouteNode(String routeNodes){
+        this.routeNodes = routeNodes;
     }
 }

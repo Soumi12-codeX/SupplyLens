@@ -3,6 +3,8 @@ package com.web.backend_SupplyLens.repository;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.web.backend_SupplyLens.model.Shipment;
@@ -19,4 +21,7 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     
     // for admin - filter by status
     List<Shipment> findByAssignmentStatus(String status);
+
+    @Query("SELECT s FROM Shipment s WHERE s.route.routeNodes LIKE %:nodeName%")
+    List<Shipment> findAffectedByNode(@Param("nodeName") String nodeName);
 }
