@@ -69,7 +69,7 @@ public class Route {
     public String getRouteNodes(){
         return routeNodes;
     }
-    public void setRouteNode(String routeNodes){
+    public void setRouteNodes(String routeNodes){
         this.routeNodes = routeNodes;
     }
 }

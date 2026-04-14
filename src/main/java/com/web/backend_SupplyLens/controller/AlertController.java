@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
@@ -15,16 +16,21 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
-
+import com.web.backend_SupplyLens.dto.RerouteRequest;
 import com.web.backend_SupplyLens.model.Alert;
 import com.web.backend_SupplyLens.model.RouteOption;
 import com.web.backend_SupplyLens.model.Shipment;
+import com.web.backend_SupplyLens.model.TransitNode;
 import com.web.backend_SupplyLens.repository.AlertRepository;
+import com.web.backend_SupplyLens.repository.RouteOptionRepo;
 import com.web.backend_SupplyLens.repository.ShipmentRepository;
 import com.web.backend_SupplyLens.service.AlertService;
+import com.web.backend_SupplyLens.service.CoordinateService;
+import com.web.backend_SupplyLens.service.RedirectService;
 
 @RestController
 @RequestMapping("/api/alerts")
@@ -38,6 +44,15 @@ public class AlertController {
 
     @Autowired
     private ShipmentRepository shipmentRepo;
+
+    @Autowired
+    private RedirectService redirectService;
+
+    @Autowired
+    private CoordinateService coordinateService;
+
+    @Autowired
+    private RouteOptionRepo routeOptionRepo;
 
     @PostMapping("/from-python")
     public ResponseEntity<?> receiveAlert(@RequestBody Alert alert) {
@@ -93,7 +108,7 @@ public class AlertController {
             routeOption.setEstimatedHours((Integer) opt.get("estimatedHours"));
             routeOption.setRiskLevel((String) opt.get("riskLevel"));
             routeOption.setTradeoff((String) opt.get("tradeoff"));
-
+            routeOptionRepo.save(routeOption);
         }
     }
 
@@ -102,15 +117,73 @@ public class AlertController {
         return alertService.getAllAlerts();
     }
 
-    @PostMapping("/{alertId}/select-route/{routeOptionId}")
-    public ResponseEntity<?> selectRoute(@PathVariable Long alertId, @PathVariable Long routeOptionId) {
-        alertService.selectRoute(alertId, routeOptionId);
-        return ResponseEntity.ok("Route selected, driver notified");
-    }
-
     @PostMapping("/{id}/dismiss")
     public ResponseEntity<?> dismiss(@PathVariable Long id) {
         alertService.dismiss(id);
         return ResponseEntity.ok("Dismissed");
+    }
+
+    @PostMapping("/{alertId}/select-route/{routeOptionId}")
+    public ResponseEntity<?> selectRoute(
+        @PathVariable Long alertId,
+        @PathVariable Long routeOptionId,
+        @RequestParam Long sourceWhId,
+        @RequestParam Long destWhId
+    ){
+        alertService.selectRoute(alertId, routeOptionId);
+        String googleMapsLink = redirectService.generateRedirectLinkFromOption(routeOptionId, sourceWhId, destWhId);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Route selected, driver notified");
+        response.put("redirectionLink", googleMapsLink);
+
+        return ResponseEntity.ok(response);
+    }
+    @PostMapping("/generate-reroute-link")
+    public ResponseEntity<Map<String, String>> getRerouteLink(@RequestBody RerouteRequest request) {
+        // RerouteRequest should contain: sourceWarehouseId, destWarehouseId, and the List<String> of cities
+        
+        String finalUrl = redirectService.generateGoogleMapsLink(
+            request.getSourceWarehouseId(), 
+            request.getDestWarehouseId(), 
+            request.getTransitCities()
+        );
+
+        Map<String, String> response = new HashMap<>();
+        response.put("googleMapsUrl", finalUrl);
+        
+        return ResponseEntity.ok(response);
+    }
+    @PostMapping("/preview-path")
+    public ResponseEntity<?> previewPath(@RequestBody List<String> cityNames) {
+        List<Map<String, Object>> pathWithCoords = cityNames.stream().map(city -> {
+            TransitNode node = coordinateService.getCoordinates(city);
+            Map<String, Object> nodeData = new HashMap<>();
+            nodeData.put("name", city);
+            nodeData.put("lat", node.getLatitude());
+            nodeData.put("lng", node.getLongitude());
+            return nodeData;
+        }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(pathWithCoords);
+    }
+    
+    @PostMapping("/process-reroute")
+    public ResponseEntity<?> processReroute(@RequestBody Map<String, Object> pythonResponse) {
+        // Data from Python: { "shipmentId": 101, "path": ["Mumbai", "Nasik", "Indore"] }
+        List<String> cityNames = (List<String>) pythonResponse.get("path");
+        
+        // Convert city names to List of Objects with Lat/Long
+        List<Map<String, Object>> pathWithCoords = cityNames.stream().map(city -> {
+            TransitNode node = coordinateService.getCoordinates(city);
+            Map<String, Object> nodeData = new HashMap<>();
+            nodeData.put("name", city);
+            nodeData.put("lat", node.getLatitude());
+            nodeData.put("lng", node.getLongitude());
+            return nodeData;
+        }).collect(Collectors.toList());
+
+        // Return this to Frontend
+        return ResponseEntity.ok(pathWithCoords);
     }
 }
