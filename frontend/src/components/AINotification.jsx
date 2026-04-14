@@ -43,8 +43,25 @@ export default function AINotification({ alert, onApprove, onDismiss, isDriver =
         <p className="text-slate-300 text-sm mb-3 leading-relaxed">{alert.description}</p>
         <p className="text-slate-400 text-xs mb-4">{alert.affectedArea}</p>
 
-        {/* Suggested Route */}
-        {alert.suggestedRoute && (
+        {/* Suggested Routes from AI */}
+        {alert.routeOptions && alert.routeOptions.length > 0 ? (
+          <div className="space-y-3 mb-4">
+            <p className="text-xs text-slate-400 font-medium tracking-wider uppercase">AI Suggested Detours</p>
+            {alert.routeOptions.map((opt, idx) => (
+              <div key={idx} className={`p-3 rounded-lg border transition-all ${idx === 0 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-white/5 border-white/5'}`}>
+                <div className="flex justify-between items-start mb-1">
+                  <span className={`text-xs font-bold uppercase ${idx === 0 ? 'text-emerald-400' : 'text-slate-400'}`}>{opt.label}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400">{opt.riskLevel} Risk</span>
+                </div>
+                <p className="text-xs text-slate-300 font-mono mb-1">{opt.path}</p>
+                <div className="flex items-center gap-3 mt-2 text-[10px]">
+                  <span className="text-white">ETA: {opt.estimatedHours}h</span>
+                  <span className="text-slate-500 italic">{opt.tradeoff}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : alert.suggestedRoute && (
           <div className="bg-white/5 rounded-lg p-3 mb-4 border border-white/5">
             <p className="text-xs text-slate-400 mb-1">AI Suggested Route</p>
             <p className="text-sm text-white font-medium">{alert.suggestedRoute.description}</p>

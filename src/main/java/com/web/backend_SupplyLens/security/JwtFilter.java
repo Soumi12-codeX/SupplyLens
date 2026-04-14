@@ -55,19 +55,29 @@ public class JwtFilter extends OncePerRequestFilter {
             String username = jwtService.extractUsername(token);
             String role = jwtService.extractRole(token);
 
-            List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+            System.out.println(">>> JWT VALID - User: " + username + ", Role: " + role);
 
             User user = userRepo.findByEmail(username).orElse(null);
+            
+            // If email check fails, try driverId check (for drivers)
+            if (user == null) {
+                user = userRepo.findByDriverId(username).orElse(null);
+            }
 
             if (user != null) {
+                List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(user, null,
                         authorities);
 
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+                System.out.println(">>> AUTH SET for: " + username);
+            } else {
+                System.out.println(">>> AUTH FAILED: User not found in database for token subject: " + username);
             }
         } catch (Exception e) {
-            // Log the exception if needed
-            System.out.println("JWT validation failed: " + e.getMessage());
+            System.out.println(">>> JWT VALIDATION ERROR: " + e.getMessage());
+            // Clear context to be safe if a bad token was provided
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);

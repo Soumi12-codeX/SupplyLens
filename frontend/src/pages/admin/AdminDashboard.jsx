@@ -6,8 +6,9 @@ import RouteOverlay from '../../components/Map/RouteOverlay';
 import RoadConditionOverlay from '../../components/Map/RoadConditionOverlay';
 import TruckList from './TruckList';
 import TruckDetail from './TruckDetail';
+import AINotification from '../../components/AINotification';
 import api from '../../services/api';
-import AINotification from '../../components/AINotification.jsx';
+import { useAuth } from '../../context/AuthContext';
 import {
   Truck, AlertTriangle, Activity, Clock,
   CheckCircle, X, ChevronDown, ChevronUp,
@@ -15,13 +16,14 @@ import {
 
 // Severity config for the feed bar
 const SEV = {
-  critical: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', dot: 'bg-red-500', label: 'Critical' },
-  high: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400', dot: 'bg-orange-400', label: 'High' },
-  medium: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400', dot: 'bg-yellow-400', label: 'Medium' },
+  critical: { bg: 'bg-red-500/10',    border: 'border-red-500/30',    text: 'text-red-400',    dot: 'bg-red-500',    label: 'Critical' },
+  high:     { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400', dot: 'bg-orange-400', label: 'High' },
+  medium:   { bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400', dot: 'bg-yellow-400', label: 'Medium' },
 };
 
 export default function AdminDashboard() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { user } = useAuth();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [fleet, setFleet] = useState([]);
   const [selectedTruck, setSelectedTruck] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -33,54 +35,83 @@ export default function AdminDashboard() {
 
   const [shipments, setShipments] = useState([]);
 
+  // Fetch real shipments
   useEffect(() => {
     const fetchShipments = async () => {
       try {
-        const res = await api.get("/admin/shipments");
-        setShipments(res.data);
+        const warehouseId = user?.warehouse?.id;
+        const url = warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments';
+        const res = await api.get(url);
+        const realShipments = transformShipments(res.data);
+        setFleet(realShipments);
       } catch (err) {
-        console.error(err);
+        console.error("Error fetching shipments:", err);
       }
     };
 
     fetchShipments();
+    const pollInterval = setInterval(fetchShipments, 30000); // Poll every 30s
+    
+    // Local simulation for smooth progress
+    const simInterval = setInterval(() => {
+      setFleet(prevFleet => prevFleet.map(truck => {
+        if (truck.status === 'on-route' && truck.progress < 1) {
+          const newProgress = Math.min(1, truck.progress + 0.001);
+          // Interpolate position
+          const lat = truck.originPosition.lat + (truck.destinationPosition.lat - truck.originPosition.lat) * newProgress;
+          const lng = truck.originPosition.lng + (truck.destinationPosition.lng - truck.originPosition.lng) * newProgress;
+          return {
+             ...truck,
+             progress: newProgress,
+             currentPosition: { lat, lng }
+          };
+        }
+        return truck;
+      }));
+    }, 2000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearInterval(simInterval);
+    };
   }, []);
 
-  const transformShipments = (shipments) => {
-    return shipments
-      .filter(s => s.assignmentStatus === "IN_PROGRESS" && s.assignedDriverId)
-      .map((s, index) => ({
-        id: `TRK-${s.id}`,
-        driver: s.assignedDriverId || "Not Assigned",
-        originName: s.route?.source || "Warehouse",
-        destinationName: s.route?.destination || "Destination",
-        cargo: s.transport?.type || "Goods",
-        status: s.assignmentStatus === "IN_PROGRESS" ? "on-route" : "delayed",
-        speed: 50,
-        progress: 0.3,
-        eta: "5h",
-        distanceRemaining: "200 km",
+  const transformShipments = (backendShipments) => {
+    return backendShipments
+      .map((s) => {
+        const origin = { 
+          lat: s.warehouse?.latitude || 20.5937, 
+          lng: s.warehouse?.longitude || 78.9629 
+        };
+        const dest = { 
+          lat: s.route?.latitude || origin.lat + 2, 
+          lng: s.route?.longitude || origin.lng + 2 
+        };
+        
+        const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
+        const progress = s.assignmentStatus === "DELIVERED" ? 1 : 0.05;
 
-        currentPosition: {
-          lat: 20.5937 + Math.random(),
-          lng: 78.9629 + Math.random(),
-        },
-
-        route: []
-      }));
+        return {
+          id: `SHP-${s.id}`,
+          driver: s.assignedDriverId || "Not Assigned",
+          originName: s.warehouse?.name || "Warehouse",
+          destinationName: s.route?.destination || "Destination",
+          cargo: s.notes || "High Priority Goods",
+          status: s.assignmentStatus === "DELIVERED" ? "delivered" : (isStarted ? "on-route" : "delayed"),
+          speed: isStarted ? 60 : 0,
+          progress: progress,
+          eta: s.route?.estimatedTime || "5h",
+          distanceRemaining: s.route?.distance ? `${s.route.distance} km` : "200 km",
+          originPosition: origin,
+          destinationPosition: dest,
+          currentPosition: {
+            lat: origin.lat + (dest.lat - origin.lat) * progress,
+            lng: origin.lng + (dest.lng - origin.lng) * progress,
+          },
+          route: [] // Map will draw straight line or we could fetch route points
+        };
+      });
   };
-
-  const fetchShipments = async () => {
-    try {
-      const res = await api.get('/admin/shipments'); // YOUR endpoint
-      const transformed = transformShipments(res.data);
-      setFleet(transformed);
-    } catch (err) {
-      console.error("Error fetching shipments", err);
-      setFleet([]); // no shipments = no trucks
-    }
-  };
-
   const handleSelectTruck = useCallback((truck) => {
     setSelectedTruck(truck);
     setMapCenter([truck.currentPosition.lat, truck.currentPosition.lng]);
@@ -97,17 +128,17 @@ export default function AdminDashboard() {
   };
 
   const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
-  const highCount = alerts.filter((a) => a.severity === 'high').length;
-  const blockedRoads = roadConditions.filter((c) => c.condition === 'blocked').length;
+  const highCount     = alerts.filter((a) => a.severity === 'high').length;
+  const blockedRoads  = roadConditions.filter((c) => c.condition === 'blocked').length;
   const congestedRoads = roadConditions.filter((c) => c.condition !== 'blocked').length;
 
   const stats = [
-    { label: 'Active Trucks', value: fleet.filter((t) => t.status === 'on-route').length, icon: Truck, color: 'text-neon-blue' },
-    { label: 'Delayed', value: fleet.filter((t) => t.status === 'delayed').length, icon: AlertTriangle, color: 'text-red-400' },
-    { label: 'Open Alerts', value: alerts.length, icon: Activity, color: 'text-orange-400' },
-    { label: 'Avg Speed', value: fleet.length ? `${Math.floor(fleet.reduce((s, t) => s + t.speed, 0) / fleet.length)} km/h` : '—', icon: Clock, color: 'text-emerald-400' },
-    { label: 'Roads Blocked', value: blockedRoads, icon: AlertTriangle, color: 'text-red-500' },
-    { label: 'Congested', value: congestedRoads, icon: Activity, color: 'text-yellow-400' },
+    { label: 'Active Trucks',  value: fleet.filter((t) => t.status === 'on-route').length, icon: Truck,          color: 'text-neon-blue'  },
+    { label: 'Delayed',        value: fleet.filter((t) => t.status === 'delayed').length,  icon: AlertTriangle,  color: 'text-red-400'    },
+    { label: 'Open Alerts',    value: alerts.length,                                        icon: Activity,       color: 'text-orange-400' },
+    { label: 'Avg Speed',      value: fleet.length ? `${Math.floor(fleet.reduce((s, t) => s + t.speed, 0) / fleet.length)} km/h` : '—', icon: Clock, color: 'text-emerald-400' },
+    { label: 'Roads Blocked',  value: blockedRoads,                                         icon: AlertTriangle,  color: 'text-red-500'    },
+    { label: 'Congested',      value: congestedRoads,                                       icon: Activity,       color: 'text-yellow-400' },
   ];
 
   return (
@@ -121,9 +152,9 @@ export default function AdminDashboard() {
         {/* ── Top Stats Bar ───────────────────────────────────────── */}
         <div className="border-b border-white/5 bg-slate-950/80 backdrop-blur-sm shrink-0">
           {/* Row 1: title + stats */}
-          <div className="h-14 flex items-center justify-between px-6">
+          <div className="min-h-14 flex flex-wrap items-center justify-between px-3 md:px-6 py-2 gap-2">
             <div className="flex items-center gap-3">
-              <h1 className="text-white font-semibold text-base">Fleet Command Center</h1>
+              <h1 className="text-white font-semibold text-sm md:text-base">Fleet Command</h1>
               {/* Live pulse indicator */}
               {alerts.length > 0 && (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] font-medium animate-pulse">
@@ -132,13 +163,13 @@ export default function AdminDashboard() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-5">
-              {stats.map((stat) => (
-                <div key={stat.label} className="flex items-center gap-2">
-                  <stat.icon size={14} className={stat.color} />
+            <div className="flex items-center gap-3 md:gap-5 flex-wrap">
+              {stats.slice(0, 4).map((stat) => (
+                <div key={stat.label} className="flex items-center gap-1.5">
+                  <stat.icon size={13} className={stat.color} />
                   <div>
-                    <p className="text-[10px] text-slate-500 leading-none mb-0.5">{stat.label}</p>
-                    <p className={`text-sm font-bold leading-none ${stat.color}`}>{stat.value}</p>
+                    <p className="text-[9px] text-slate-500 leading-none mb-0.5 hidden sm:block">{stat.label}</p>
+                    <p className={`text-xs font-bold leading-none ${stat.color}`}>{stat.value}</p>
                   </div>
                 </div>
               ))}
@@ -225,9 +256,9 @@ export default function AdminDashboard() {
 
         {/* ── Main Map + Panels ──────────────────────────────────── */}
         <div className="flex-1 flex relative overflow-hidden">
-          {/* Truck List Panel */}
+          {/* Truck List Panel — desktop: fixed left column | mobile: hidden (use toggle) */}
           {showTruckList && (
-            <div className="w-80 border-r border-white/5 bg-slate-950/40 overflow-y-auto">
+            <div className="hidden md:block w-80 border-r border-white/5 bg-slate-950/40 overflow-y-auto shrink-0">
               <TruckList
                 trucks={fleet}
                 alerts={alerts}
@@ -257,51 +288,72 @@ export default function AdminDashboard() {
               ))}
             </MapView>
 
-            {/* Toggle truck list */}
+            {/* Toggle truck list — desktop only */}
             <button
               onClick={() => setShowTruckList(!showTruckList)}
-              className="absolute top-4 left-4 z-[1000] px-3 py-2 rounded-lg bg-slate-900/90 border border-white/10 text-slate-300 text-xs hover:text-white hover:border-neon-blue/30 transition-all"
+              className="hidden md:block absolute top-4 left-4 z-[1000] px-3 py-2 rounded-lg bg-slate-900/90 border border-white/10 text-slate-300 text-xs hover:text-white hover:border-neon-blue/30 transition-all"
             >
               {showTruckList ? 'Hide List' : 'Show List'}
             </button>
 
-            {/* Map Legend */}
-            <div className="absolute bottom-4 right-4 z-[1000] px-4 py-3 rounded-lg bg-slate-900/90 border border-white/10 backdrop-blur-sm">
-              <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-2">Legend</p>
-              <div className="flex flex-col gap-1.5 text-xs">
-                <span className="flex items-center gap-2">
-                  <span className="w-6 h-1.5 rounded bg-neon-blue"></span> Truck on route
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="w-6 h-1.5 rounded bg-red-500"></span> Delayed truck
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="w-6 h-2 rounded bg-red-500"></span> Road blocked 🚫
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="w-6 h-2 rounded bg-yellow-400"></span> Congested ⚠
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="w-6 h-2 rounded bg-orange-400"></span> Semi-congested 🟠
-                </span>
+            {/* Mobile: Show trucks floating button */}
+            <button
+              onClick={() => setShowTruckList(!showTruckList)}
+              className="md:hidden absolute top-4 left-4 z-[1000] px-3 py-2 rounded-lg bg-slate-900/90 border border-white/10 text-slate-300 text-xs hover:text-white transition-all"
+            >
+              {showTruckList ? '✕ Trucks' : '🚛 Trucks'}
+            </button>
+
+            {/* Map Legend — compact on mobile */}
+            <div className="absolute bottom-4 right-2 md:right-4 z-[1000] px-3 md:px-4 py-2 md:py-3 rounded-lg bg-slate-900/90 border border-white/10 backdrop-blur-sm">
+              <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-1.5">Legend</p>
+              <div className="flex flex-col gap-1 text-[10px] md:text-xs">
+                <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-1.5 rounded bg-neon-blue"></span> On route</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-1.5 rounded bg-red-500"></span> Delayed</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-2 rounded bg-red-500"></span> Blocked 🚫</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-2 rounded bg-yellow-400"></span> Congested ⚠</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-2 rounded bg-orange-400"></span> Semi 🟠</span>
               </div>
             </div>
           </div>
 
-          {/* Truck Detail Panel */}
+          {/* Truck Detail Panel — desktop: fixed right column | mobile: bottom sheet */}
           {selectedTruck && (
-            <div className="w-96 border-l border-white/5 bg-slate-950/40 overflow-y-auto">
-              <TruckDetail
-                truck={fleet.find((t) => t.id === selectedTruck.id) || selectedTruck}
-                alerts={alerts.filter((a) => a.truckId === selectedTruck.id)}
-                onClose={() => { setSelectedTruck(null); setMapCenter([20.5937, 78.9629]); setMapZoom(5); }}
+            <>
+              {/* Desktop */}
+              <div className="hidden md:block w-96 border-l border-white/5 bg-slate-950/40 overflow-y-auto shrink-0">
+                <TruckDetail
+                  truck={fleet.find((t) => t.id === selectedTruck.id) || selectedTruck}
+                  alerts={alerts.filter((a) => a.truckId === selectedTruck.id)}
+                  onClose={() => { setSelectedTruck(null); setMapCenter([20.5937, 78.9629]); setMapZoom(5); }}
+                />
+              </div>
+              {/* Mobile bottom sheet */}
+              <div className="md:hidden absolute bottom-16 left-0 right-0 z-[1500] max-h-[55vh] overflow-y-auto rounded-t-2xl bg-slate-950/98 border-t border-white/10 backdrop-blur-md">
+                <TruckDetail
+                  truck={fleet.find((t) => t.id === selectedTruck.id) || selectedTruck}
+                  alerts={alerts.filter((a) => a.truckId === selectedTruck.id)}
+                  onClose={() => { setSelectedTruck(null); setMapCenter([20.5937, 78.9629]); setMapZoom(5); }}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Mobile truck list bottom sheet */}
+          {showTruckList && (
+            <div className="md:hidden absolute bottom-16 left-0 right-0 z-[1400] max-h-[45vh] overflow-y-auto rounded-t-2xl bg-slate-950/98 border-t border-white/10 backdrop-blur-md">
+              <TruckList
+                trucks={fleet}
+                alerts={alerts}
+                selectedId={selectedTruck?.id}
+                onSelect={(t) => { handleSelectTruck(t); setShowTruckList(false); }}
               />
             </div>
           )}
 
           {/* AI Alerts popup stack — top right, only show latest 2 */}
           {alerts.length > 0 && (
-            <div className="absolute top-4 right-4 z-[1000] space-y-3 pointer-events-none" style={{ maxWidth: '400px' }}>
+            <div className="absolute top-4 right-2 md:right-4 z-[1000] space-y-2 md:space-y-3 pointer-events-none" style={{ maxWidth: '320px' }}>
               {alerts.slice(0, 2).map((alert) => (
                 <div key={alert.id} className="pointer-events-auto">
                   <AINotification
@@ -315,6 +367,8 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+      {/* Bottom padding for mobile nav */}
+      <div className="md:hidden h-16 shrink-0" />
     </div>
   );
 }

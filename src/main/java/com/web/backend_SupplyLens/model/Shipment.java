@@ -21,9 +21,12 @@ public class Shipment {
     private Route route;
 
     private String status;
+    private String notes;
+    private String priority;
 
     private String routeStatus; //normal, rerouted
     private String currentPath; //set when admin selects a route
+    private String routeNodes; // Comma-separated list of nodes like "HAMBURG,HANOVER,FRANKFURT,MUNICH"
 
     private String assignedDriverId;
     private String assignmentStatus; // UNASSIGNED, ASSIGNED, IN_PROGRESS, DELIVERED
@@ -56,6 +59,18 @@ public class Shipment {
     public void setStatus(String status) {
         this.status = status;
     }
+    public String getNotes() {
+        return notes;
+    }
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+    public String getPriority() {
+        return priority;
+    }
+    public void setPriority(String priority) {
+        this.priority = priority;
+    }
     public String getRouteStatus() {
         return routeStatus;
     }
@@ -67,6 +82,12 @@ public class Shipment {
     }
     public void setCurrentPath(String currentPath) {
         this.currentPath = currentPath;
+    }
+    public String getRouteNodes() {
+        return routeNodes;
+    }
+    public void setRouteNodes(String routeNodes) {
+        this.routeNodes = routeNodes;
     }
     public String getAssignedDriverId() {
         return assignedDriverId;

@@ -44,10 +44,16 @@ public class ShipmentService {
         return shipmentRepo.findAll();
     }
 
+    public List<Shipment> getShipmentsByWarehouse(Long warehouseId) {
+        return shipmentRepo.findByWarehouse_Id(warehouseId);
+    }
+
     public Shipment creatAndAssign(Shipment shipment, Long warehouseId){
         Warehouse warehouse = warehouseRepo.findById(warehouseId).orElseThrow();
         shipment.setWarehouse(warehouse);
-        shipment.setAssignmentStatus("UNASSIGNED");
+        if (shipment.getAssignmentStatus() == null) {
+            shipment.setAssignmentStatus("UNASSIGNED");
+        }
 
         if (shipment.getTransport() != null && shipment.getTransport().getId() != null) {
             Transport transport = transportRepo.findById(shipment.getTransport().getId())
@@ -55,10 +61,24 @@ public class ShipmentService {
             shipment.setTransport(transport);
         }
 
+        Route finalRoute = null;
         if (shipment.getRoute() != null && shipment.getRoute().getId() != null) {
-            Route route = routeRepo.findById(shipment.getRoute().getId())
+            finalRoute = routeRepo.findById(shipment.getRoute().getId())
                     .orElseThrow(() -> new RuntimeException("Route not found"));
-            shipment.setRoute(route);
+            shipment.setRoute(finalRoute);
+        }
+
+        // --- NEW: Generate currentPath for map visualization ---
+        if (finalRoute != null) {
+            // Try to find the destination warehouse by name to get its coordinates
+            Warehouse destWh = warehouseRepo.findByName(finalRoute.getDestination()).orElse(null);
+            if (destWh != null) {
+                String pathJson = generateDefaultPath(
+                    warehouse.getLatitude(), warehouse.getLongitude(),
+                    destWh.getLatitude(), destWh.getLongitude()
+                );
+                shipment.setCurrentPath(pathJson);
+            }
         }
 
         //find nearest drivers
@@ -77,12 +97,31 @@ public class ShipmentService {
             });
         }
         else {
-            // ✅ no drivers available — don't crash
             shipment.setAssignmentStatus("UNASSIGNED");
             shipment.setAssignedDriverId(null);
         }
         shipment.setRouteStatus("NORMAL");
         return shipmentRepo.save(shipment);
+    }
+
+    private String generateDefaultPath(double lat1, double lng1, double lat2, double lng2) {
+        StringBuilder json = new StringBuilder("[");
+        int points = 15;
+        for (int i = 0; i <= points; i++) {
+            double t = (double) i / points;
+            // Linear interpolation with a tiny bit of random "road" variance
+            double lat = lat1 + (lat2 - lat1) * t;
+            double lng = lng1 + (lng2 - lng1) * t;
+            
+            // Add a slight curve (sine wave) for visual appeal on the map
+            double curve = Math.sin(t * Math.PI) * 0.02;
+            lat += curve;
+
+            json.append(String.format(java.util.Locale.ROOT, "{\"lat\": %f, \"lng\": %f}", lat, lng));
+            if (i < points) json.append(",");
+        }
+        json.append("]");
+        return json.toString();
     }
 
     private String findNearestDriver(double warehouseLat, double warehouseLong){

@@ -4,15 +4,27 @@ import { useNavigate } from 'react-router-dom';
 export default function HeroSection() {
   const navigate = useNavigate();
   return (
-    <section className="relative h-screen w-full overflow-hidden flex items-center justify-center bg-black">
+    <section 
+      className="relative w-full overflow-hidden flex items-center justify-center bg-black"
+      style={{ height: '100dvh' }}
+    >
       {/* Background Video */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <video
           autoPlay
           loop
           muted
           playsInline
-          className="w-full h-full object-cover opacity-60"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: '85% center',
+            opacity: 0.6,
+          }}
         >
           <source src="/hero-video.mp4" type="video/mp4" />
         </video>
@@ -21,7 +33,10 @@ export default function HeroSection() {
       </div>
 
       {/* Hero Content */}
-      <div className="relative z-10 container mx-auto px-6 lg:px-12 h-screen flex flex-col justify-center pointer-events-none">
+      <div 
+        className="relative z-10 container mx-auto px-6 lg:px-12 flex flex-col justify-center pointer-events-none"
+        style={{ height: '100dvh' }}
+      >
         <div className="flex flex-col items-start text-left max-w-3xl pointer-events-auto">
           {/* Main Heading */}
           <motion.h1

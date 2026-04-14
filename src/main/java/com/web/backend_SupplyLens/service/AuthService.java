@@ -5,11 +5,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.web.backend_SupplyLens.dto.AuthResponse;
+import com.web.backend_SupplyLens.model.DriverLocation;
+import com.web.backend_SupplyLens.repository.DriverLocationRepository;
 import com.web.backend_SupplyLens.model.User;
 import com.web.backend_SupplyLens.model.Warehouse;
 import com.web.backend_SupplyLens.repository.UserRepository;
 import com.web.backend_SupplyLens.repository.WarehouseRepository;
 import com.web.backend_SupplyLens.security.JwtService;
+
+import java.time.LocalDateTime;
 
 @Service
 public class AuthService {
@@ -25,6 +29,9 @@ public class AuthService {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private DriverLocationRepository driverLocationRepo;
 
     public AuthResponse adminLogin(String email, String password) {
         User user = userRepo.findByEmail(email).orElseThrow();
@@ -66,6 +73,20 @@ public class AuthService {
                     .orElseThrow(() -> new RuntimeException("Warehouse does not exists"));
             user.setWarehouse(warehouse);
         }
-        return userRepo.save(user);
+
+        User savedUser = userRepo.save(user);
+
+        // If it's a driver, initialize their location so they can be assigned shipments
+        if ("DRIVER".equalsIgnoreCase(savedUser.getRole()) && savedUser.getDriverId() != null) {
+            DriverLocation location = new DriverLocation();
+            location.setDriverId(savedUser.getDriverId());
+            location.setAvailable(true);
+            location.setLatitude(20.5937); // Default central location
+            location.setLongitude(78.9629);
+            location.setLastUpdated(LocalDateTime.now());
+            driverLocationRepo.save(location);
+        }
+
+        return savedUser;
     }
 }

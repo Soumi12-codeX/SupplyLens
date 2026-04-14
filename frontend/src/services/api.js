@@ -18,6 +18,13 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      console.warn("Session expired or unauthorized. Logging out...");
+      localStorage.clear();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(error);
   }
 );

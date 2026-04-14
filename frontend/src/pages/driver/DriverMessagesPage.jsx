@@ -45,12 +45,12 @@ export default function DriverMessagesPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="border-b border-white/5 bg-slate-950/80 backdrop-blur-sm shrink-0">
-          <div className="h-14 flex items-center justify-between px-6">
+          <div className="min-h-14 flex flex-wrap items-center justify-between px-3 md:px-6 py-2 gap-2">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-neon-blue/10 border border-neon-blue/20 flex items-center justify-center">
                 <MessageSquare size={16} className="text-neon-blue" />
               </div>
-              <h1 className="text-white font-semibold text-base">Messages</h1>
+              <h1 className="text-white font-semibold text-sm md:text-base">Messages</h1>
               {messages.filter(m => m.status === 'pending').length > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[10px] font-medium">
                   {messages.filter(m => m.status === 'pending').length} pending
@@ -61,7 +61,7 @@ export default function DriverMessagesPage() {
         </div>
 
         {/* Messages Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden pb-16 md:pb-0">
           <div className="max-w-2xl mx-auto h-full">
             <DriverMessages
               messages={messages}

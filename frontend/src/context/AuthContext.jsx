@@ -65,13 +65,19 @@ export const AuthProvider = ({ children }) => {
           driverId: data.driverId,
           pin: data.pin
         });
-        token = res.data;
+        const token = res.data;
         localStorage.setItem('token', token);
         localStorage.setItem('role', 'driver');
         localStorage.setItem('driverId', data.driverId);
         localStorage.setItem('name', data.name || 'Driver');
+
+        setUser({
+          token,
+          role: 'driver',
+          driverId: data.driverId,
+          name: data.name || 'Driver'
+        });
       }
-      setUser({ token, role, ...data });
       return { success: true };
     } catch (err) {
       return {

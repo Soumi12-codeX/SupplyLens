@@ -33,7 +33,7 @@ public class DriverController {
 
     @GetMapping("/shipments/{driverId}")
     public List<Shipment> getShipmentsForDriver(@PathVariable String driverId){
-        return shipmentRepo.findByTransport_Driver_DriverId(driverId);
+        return shipmentRepo.findByAssignedDriverId(driverId);
     }
 
     // ✅ driver sends location every 15s from frontend
@@ -65,6 +65,15 @@ public class DriverController {
         });
 
         return ResponseEntity.ok("Shipment delivered, driver is now available");
+    }
+
+    // ✅ driver starts the trip after being assigned
+    @PostMapping("/shipments/{shipmentId}/start")
+    public ResponseEntity<?> startTrip(@PathVariable Long shipmentId) {
+        Shipment shipment = shipmentRepo.findById(shipmentId).orElseThrow();
+        shipment.setAssignmentStatus("IN_PROGRESS");
+        shipmentRepo.save(shipment);
+        return ResponseEntity.ok("Trip started! Drive safe.");
     }
 }
 

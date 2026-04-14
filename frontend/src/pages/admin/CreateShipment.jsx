@@ -35,7 +35,8 @@ export default function CreateShipment() {
   const [quantity, setQuantity] = useState('');
   const [priority, setPriority] = useState('standard');
   const [notes, setNotes] = useState('');
-  const [selectedRouteId, setSelectedRouteId] = useState(''); // FIXED: Added missing state
+  const [selectedRouteId, setSelectedRouteId] = useState(''); 
+  const [routeNodes, setRouteNodes] = useState('HAMBURG, HANOVER, FRANKFURT, MUNICH'); // AI Monitoring nodes
 
   const steps = [
     { num: 1, label: 'Route', icon: MapPin },
@@ -81,10 +82,17 @@ export default function CreateShipment() {
   // --- 5. SUBMISSION LOGIC ---
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    
+    // Merge: Use upstream structure + AI routeNodes
     const shipmentPayload = {
       route: { id: parseInt(selectedRouteId) },
-      transport: { id: 1 }, 
-      status: "PENDING",
+      transport: { id: 2 }, 
+      routeNodes: routeNodes, // AI Feature
+      status: "CREATED",
+      assignmentStatus: "ASSIGNED",
+      // Extra details for record keeping
+      notes: notes,
+      priority: priority
     };
 
     try {
@@ -102,6 +110,20 @@ export default function CreateShipment() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setCurrentStep(1);
+    setPickupWarehouse(user?.warehouse?.id || '');
+    setDeliveryLocation('');
+    setSelectedRouteId('');
+    setCargoType('');
+    setWeight('');
+    setQuantity('');
+    setPriority('standard');
+    setNotes('');
+    setRouteNodes('HAMBURG, HANOVER, FRANKFURT, MUNICH');
+    setSubmittedData(null);
   };
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 4));
@@ -178,6 +200,22 @@ export default function CreateShipment() {
                         {CARGO_TYPES.map(type => <option key={type} value={type} className="bg-slate-900">{type}</option>)}
                       </select>
                       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    </div>
+
+                    {/* Route Nodes Input */}
+                    <div className="mt-6">
+                      <label className="flex items-center gap-2 text-slate-300 text-sm font-medium mb-3">
+                        <ArrowRight size={14} className="text-neon-blue" />
+                        Planned Route Nodes
+                      </label>
+                      <input
+                        type="text"
+                        value={routeNodes}
+                        onChange={(e) => setRouteNodes(e.target.value)}
+                        placeholder="e.g. HAMBURG, HANOVER, FRANKFURT, MUNICH"
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
+                      />
+                      <p className="mt-2 text-[10px] text-slate-500 italic">Comma-separated sequence of cities for AI monitoring.</p>
                     </div>
                   </div>
                   <div>

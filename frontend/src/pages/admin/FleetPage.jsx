@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import {
   Truck, Search, MapPin, Clock, Gauge, Package,
   Phone, AlertTriangle, Filter, ArrowUpDown,
 } from 'lucide-react';
 
 export default function FleetPage() {
+  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [fleet, setFleet] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -14,60 +16,38 @@ export default function FleetPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('id');
 
-  const [vehicles, setVehicles] = useState([]);
-
   useEffect(() => {
-    const fetchVehicles = async () => {
+    const fetchFleet = async () => {
       try {
-        const res = await api.get("/vehicles"); // or /drivers
-        setVehicles(res.data);
+        const warehouseId = user?.warehouse?.id;
+        const url = warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments';
+        console.log('[FleetPage] Fetching fleet for warehouseId:', warehouseId, 'URL:', url);
+        const res = await api.get(url);
+        console.log('[FleetPage] Received shipments:', res.data.length);
+        // Map backend Shipment to UI format
+        const mapped = res.data.map(s => ({
+          id: `SHP-${s.id}`,
+          driver: s.assignedDriverId || "Unassigned",
+          phone: "+91 98765 43210", // Placeholder if not in backend
+          originName: s.warehouse?.name || "Warehouse",
+          destinationName: s.route?.destination || "Destination",
+          cargo: "Industrial Goods", // Placeholder or from notes
+          status: s.assignmentStatus === "IN_PROGRESS" ? "on-route" : 
+                  s.assignmentStatus === "ASSIGNED" ? "on-route" : "delayed",
+          speed: s.assignmentStatus === "IN_PROGRESS" ? 65 : 0,
+          progress: s.assignmentStatus === "DELIVERED" ? 1 : (s.assignmentStatus === "IN_PROGRESS" ? 0.4 : 0),
+          eta: s.route?.estimatedTime || "4h",
+        }));
+        setFleet(mapped);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to fetch fleet data:", err);
       }
     };
 
-    fetchVehicles();
+    fetchFleet();
+    const interval = setInterval(fetchFleet, 10000); // Polling for updates
+    return () => clearInterval(interval);
   }, []);
-
-  const transformShipments = (shipments) => {
-    return shipments
-      .filter(s => s.assignmentStatus === "ASSIGNED" || s.assignmentStatus === "IN_PROGRESS")
-      .map((s, index) => ({
-        id: `TRK-${s.id}`,
-        driver: s.assignedDriverId || "Not Assigned",
-        originName: s.route?.source || "Warehouse",
-        destinationName: s.route?.destination || "Destination",
-        cargo: s.transport?.type || "Goods",
-        status: s.assignmentStatus === "DELIVERED" ? "delayed" : "on-route",
-        speed: 50,
-        progress: 0.3,
-        eta: "5h",
-        distanceRemaining: "200 km",
-
-        // TEMP STATIC LOCATION (we'll fix later with live tracking)
-        currentPosition: {
-          lat: 20.5937 + Math.random(),
-          lng: 78.9629 + Math.random(),
-        },
-
-        route: []
-      }));
-  };
-
-  useEffect(() => {
-    fetchShipments();
-  }, []);
-
-  const fetchShipments = async () => {
-    try {
-      const res = await api.get('/admin/shipments');
-      const transformed = transformShipments(res.data);
-      setFleet(transformed);
-    } catch (err) {
-      console.error(err);
-      setFleet([]);
-    }
-  };
 
   const filtered = fleet
     .filter((t) => {
@@ -100,14 +80,14 @@ export default function FleetPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="border-b border-white/5 bg-slate-950/80 backdrop-blur-sm shrink-0">
-          <div className="h-14 flex items-center justify-between px-6">
+          <div className="min-h-14 flex flex-wrap items-center justify-between px-3 md:px-6 py-2 gap-2">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-neon-blue/10 border border-neon-blue/20 flex items-center justify-center">
                 <Truck size={16} className="text-neon-blue" />
               </div>
-              <h1 className="text-white font-semibold text-base">Fleet Management</h1>
+              <h1 className="text-white font-semibold text-sm md:text-base">Fleet Management</h1>
             </div>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3 md:gap-5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
                 <span className="text-xs text-slate-400">{stats.onRoute} Active</span>
@@ -116,16 +96,16 @@ export default function FleetPage() {
                 <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
                 <span className="text-xs text-slate-400">{stats.delayed} Delayed</span>
               </div>
-              <div className="text-xs text-slate-500">Avg {stats.avgSpeed} km/h</div>
+              <div className="text-xs text-slate-500 hidden sm:block">Avg {stats.avgSpeed} km/h</div>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-20 md:pb-6">
           <div className="max-w-6xl mx-auto">
             {/* Search & Filter */}
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3 mb-5">
               <div className="flex-1 relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
@@ -136,31 +116,33 @@ export default function FleetPage() {
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Filter size={14} className="text-slate-500" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter size={14} className="text-slate-500 shrink-0" />
                 {['all', 'on-route', 'delayed'].map((status) => (
                   <button
                     key={status}
                     onClick={() => setFilterStatus(status)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-300 ${filterStatus === status
-                      ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
-                      : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
-                      }`}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all duration-300 ${
+                      filterStatus === status
+                        ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
+                        : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
+                    }`}
                   >
                     {status === 'all' ? 'All' : status === 'on-route' ? 'On Route' : 'Delayed'}
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2">
-                <ArrowUpDown size={14} className="text-slate-500" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <ArrowUpDown size={14} className="text-slate-500 shrink-0" />
                 {['id', 'speed', 'progress'].map((s) => (
                   <button
                     key={s}
                     onClick={() => setSortBy(s)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all duration-300 ${sortBy === s
-                      ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
-                      : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
-                      }`}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all duration-300 ${
+                      sortBy === s
+                        ? 'bg-neon-blue/10 text-neon-blue border-neon-blue/30'
+                        : 'bg-white/3 text-slate-500 border-white/8 hover:bg-white/5 hover:text-slate-300'
+                    }`}
                   >
                     {s === 'id' ? 'ID' : s.charAt(0).toUpperCase() + s.slice(1)}
                   </button>
@@ -176,10 +158,11 @@ export default function FleetPage() {
                 return (
                   <div
                     key={truck.id}
-                    className={`group p-5 rounded-xl border transition-all duration-300 ${truck.status === 'delayed'
-                      ? 'bg-red-500/3 border-red-500/15 hover:border-red-500/30'
-                      : 'bg-white/3 border-white/8 hover:border-white/15'
-                      } hover:bg-white/5`}
+                    className={`group p-5 rounded-xl border transition-all duration-300 ${
+                      truck.status === 'delayed'
+                        ? 'bg-red-500/3 border-red-500/15 hover:border-red-500/30'
+                        : 'bg-white/3 border-white/8 hover:border-white/15'
+                    } hover:bg-white/5`}
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between mb-3">
@@ -192,10 +175,11 @@ export default function FleetPage() {
                         </div>
                         <span className="text-white font-semibold text-sm">{truck.id}</span>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${truck.status === 'delayed'
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        }`}>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        truck.status === 'delayed'
+                          ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      }`}>
                         {truck.status === 'delayed' ? 'Delayed' : 'On Route'}
                       </span>
                     </div>
@@ -227,10 +211,11 @@ export default function FleetPage() {
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-1000 ${truck.status === 'delayed'
-                            ? 'bg-gradient-to-r from-red-500 to-orange-400'
-                            : 'bg-gradient-to-r from-neon-blue to-brand-primary'
-                            }`}
+                          className={`h-full rounded-full transition-all duration-1000 ${
+                            truck.status === 'delayed'
+                              ? 'bg-gradient-to-r from-red-500 to-orange-400'
+                              : 'bg-gradient-to-r from-neon-blue to-brand-primary'
+                          }`}
                           style={{ width: `${progress}%` }}
                         />
                       </div>

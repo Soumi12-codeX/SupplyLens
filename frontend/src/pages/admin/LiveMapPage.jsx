@@ -6,7 +6,8 @@ import RouteOverlay from '../../components/Map/RouteOverlay';
 import RoadConditionOverlay from '../../components/Map/RoadConditionOverlay';
 import AINotification from '../../components/AINotification';
 import { MockSimulator } from '../../services/mockData';
-import { Truck, AlertTriangle, Activity, X, CheckCircle } from 'lucide-react';
+import wsService from '../../services/websocket';
+import { Truck, AlertTriangle, Activity, X, CheckCircle, Navigation } from 'lucide-react';
 
 export default function LiveMapPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -14,8 +15,8 @@ export default function LiveMapPage() {
   const [selectedTruck, setSelectedTruck] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [roadConditions, setRoadConditions] = useState([]);
-  const [mapCenter, setMapCenter] = useState([20.5937, 78.9629]);
-  const [mapZoom, setMapZoom] = useState(5);
+  const [mapCenter, setMapCenter] = useState([51.1657, 10.4515]); // Set to Germany center
+  const [mapZoom, setMapZoom] = useState(6);
 
   useEffect(() => {
     const sim = new MockSimulator(
@@ -24,7 +25,25 @@ export default function LiveMapPage() {
       (condition) => setRoadConditions((prev) => [condition, ...prev].slice(0, 20))
     );
     sim.start();
-    return () => sim.stop();
+
+    // Subscribe to real WebSocket alerts
+    wsService.connect();
+    const unsubscribe = wsService.subscribe('alerts', (alert) => {
+      console.log('[LiveMap] Received real-time alert:', alert);
+      setAlerts((prev) => [{
+        ...alert,
+        icon: alert.alertType === 'LABOR_STRIKE' ? '🏥' : '🚧',
+        title: alert.alertType,
+        description: alert.messsage,
+        timestamp: new Date().toISOString()
+      }, ...prev]);
+    });
+
+    return () => {
+      sim.stop();
+      unsubscribe();
+      wsService.disconnect();
+    };
   }, []);
 
   const handleSelectTruck = useCallback((truck) => {
@@ -49,13 +68,13 @@ export default function LiveMapPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="border-b border-white/5 bg-slate-950/80 backdrop-blur-sm shrink-0">
-          <div className="h-12 flex items-center justify-between px-6">
+          <div className="min-h-12 flex flex-wrap items-center justify-between px-3 md:px-6 py-2 gap-2">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <h1 className="text-white font-semibold text-sm">Live Map</h1>
-              <span className="text-xs text-slate-500">{fleet.length} trucks tracked</span>
+              <span className="text-xs text-slate-500">{fleet.length} trucks</span>
             </div>
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-3 md:gap-4 text-xs">
               <span className="flex items-center gap-1.5 text-emerald-400">
                 <Truck size={12} />
                 {fleet.filter(t => t.status === 'on-route').length} active
@@ -88,7 +107,7 @@ export default function LiveMapPage() {
 
           {/* Selected truck info overlay */}
           {selectedTruck && (
-            <div className="absolute bottom-6 left-6 z-[1000] w-80 p-4 rounded-xl bg-slate-900/95 border border-white/10 backdrop-blur-md">
+            <div className="absolute bottom-6 left-3 md:left-6 right-3 md:right-auto z-[1000] md:w-80 p-4 rounded-xl bg-slate-900/95 border border-white/10 backdrop-blur-md">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Truck size={14} className="text-neon-blue" />
@@ -110,7 +129,7 @@ export default function LiveMapPage() {
               </div>
               <p className="text-slate-400 text-xs mb-1">{selectedTruck.driver} • {selectedTruck.phone}</p>
               <p className="text-slate-500 text-xs">{selectedTruck.originName} → {selectedTruck.destinationName}</p>
-              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/5 text-xs">
+              <div className="flex items-center gap-3 md:gap-4 mt-3 pt-3 border-t border-white/5 text-xs flex-wrap">
                 <span className="text-slate-400">ETA: <span className="text-white font-medium">{selectedTruck.eta}</span></span>
                 <span className="text-slate-400">Speed: <span className="text-white font-medium">{selectedTruck.speed} km/h</span></span>
                 <span className="text-slate-400">Cargo: <span className="text-white font-medium">{selectedTruck.cargo}</span></span>
@@ -119,20 +138,20 @@ export default function LiveMapPage() {
           )}
 
           {/* Legend */}
-          <div className="absolute bottom-4 right-4 z-[1000] px-4 py-3 rounded-lg bg-slate-900/90 border border-white/10 backdrop-blur-sm">
-            <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-2">Legend</p>
-            <div className="flex flex-col gap-1.5 text-xs">
-              <span className="flex items-center gap-2"><span className="w-6 h-1.5 rounded bg-neon-blue"></span> On route</span>
-              <span className="flex items-center gap-2"><span className="w-6 h-1.5 rounded bg-red-500"></span> Delayed</span>
-              <span className="flex items-center gap-2"><span className="w-6 h-2 rounded bg-red-500"></span> Blocked 🚫</span>
-              <span className="flex items-center gap-2"><span className="w-6 h-2 rounded bg-yellow-400"></span> Congested ⚠</span>
-              <span className="flex items-center gap-2"><span className="w-6 h-2 rounded bg-orange-400"></span> Semi-congested 🟠</span>
+          <div className="absolute bottom-4 right-2 md:right-4 z-[1000] px-3 md:px-4 py-2 md:py-3 rounded-lg bg-slate-900/90 border border-white/10 backdrop-blur-sm">
+            <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-1.5">Legend</p>
+            <div className="flex flex-col gap-1 text-[10px] md:text-xs">
+              <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-1.5 rounded bg-neon-blue"></span> On route</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-1.5 rounded bg-red-500"></span> Delayed</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-2 rounded bg-red-500"></span> Blocked 🚫</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-2 rounded bg-yellow-400"></span> Congested ⚠</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 md:w-6 h-2 rounded bg-orange-400"></span> Semi 🟠</span>
             </div>
           </div>
 
           {/* AI Alerts */}
           {alerts.length > 0 && (
-            <div className="absolute top-4 right-4 z-[1000] space-y-3 pointer-events-none" style={{ maxWidth: '400px' }}>
+            <div className="absolute top-4 right-2 md:right-4 z-[1000] space-y-2 md:space-y-3 pointer-events-none" style={{ maxWidth: '320px' }}>
               {alerts.slice(0, 2).map((alert) => (
                 <div key={alert.id} className="pointer-events-auto">
                   <AINotification
@@ -146,6 +165,8 @@ export default function LiveMapPage() {
           )}
         </div>
       </div>
+      {/* Mobile nav padding */}
+      <div className="md:hidden h-16 shrink-0" />
     </div>
   );
 }

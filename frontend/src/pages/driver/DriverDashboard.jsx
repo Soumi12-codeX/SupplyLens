@@ -5,206 +5,316 @@ import TruckMarker from '../../components/Map/TruckMarker';
 import RouteOverlay from '../../components/Map/RouteOverlay';
 import DriverMessages from './DriverMessages';
 import AINotification from '../../components/AINotification';
-import { MockSimulator } from '../../services/mockData';
-import { Navigation, MapPin, Clock, Gauge, Package, ChevronUp, ChevronDown, MessageSquare } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
+import { 
+  Navigation, MapPin, Clock, Gauge, Package, 
+  ChevronUp, ChevronDown, MessageSquare, Loader2, Play, CheckCircle2 
+} from 'lucide-react';
 
 export default function DriverDashboard() {
+  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [truck, setTruck] = useState(null);
+  const [truck, setTruck] = useState(null); // This stores the current visual state (simulated or real)
+  const [activeShipment, setActiveShipment] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [currentAlert, setCurrentAlert] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [bottomPanelExpanded, setBottomPanelExpanded] = useState(true);
+  const [startingTrip, setStartingTrip] = useState(false);
 
-  // Simulate driver's own truck (first truck in fleet)
-  useEffect(() => {
-    const sim = new MockSimulator(
-      (fleet) => setTruck(fleet[0]),
-      (alert) => {
-        // Only show alerts for our truck
-        if (!truck || alert.truckId === truck?.id) {
-          setCurrentAlert(alert);
-          setMessages((prev) => [{
-            id: alert.id,
-            type: 'ai_suggestion',
-            icon: alert.icon,
-            title: alert.title,
-            text: `${alert.description} ${alert.suggestedRoute?.description || ''}`,
-            timeSaved: alert.suggestedRoute?.timeSaved,
-            extraDistance: alert.suggestedRoute?.additionalDistance,
-            timestamp: alert.timestamp,
-            status: 'pending',
-          }, ...prev]);
-        }
+  // 1. Fetch data initially and Poll for new assignments
+  const fetchData = async () => {
+    if (!user?.driverId) return;
+    try {
+      const locRes = await api.get(`/driver/location/${user.driverId}`);
+      const loc = locRes.data;
+
+      const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
+      const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
+      
+      setActiveShipment(current);
+
+      if (!current || current.assignmentStatus === 'ASSIGNED') {
+        const staticTruck = {
+          id: `TRK-${user.driverId}`,
+          currentPosition: { lat: loc.latitude, lng: loc.longitude },
+          status: current ? 'assigned' : 'idle',
+          // Show route even if just assigned
+          route: current?.currentPath ? JSON.parse(current.currentPath) : null,
+          originName: current?.warehouse?.name || "Base",
+          destinationName: current?.route?.destination || "N/A",
+          cargo: current?.notes || "No cargo",
+          progress: 0,
+          speed: 0,
+          eta: current?.route?.estimatedTime || "N/A",
+          distanceRemaining: "Calculating..."
+        };
+        setTruck(staticTruck);
+      } else if (current.assignmentStatus === 'IN_PROGRESS') {
+        const activeTruck = {
+          id: `TRK-${user.driverId}`,
+          currentPosition: { lat: loc.latitude, lng: loc.longitude },
+          status: 'on-route',
+          route: JSON.parse(current.currentPath || '[]'),
+          originName: current.warehouse?.name,
+          destinationName: current.route?.destination,
+          cargo: current.notes,
+          progress: 0.35, 
+          speed: 65,
+          eta: current.route?.estimatedTime || "4h",
+          distanceRemaining: "120 km"
+        };
+        setTruck(activeTruck);
       }
-    );
-    sim.start();
-    return () => sim.stop();
-  }, []);
-
-  const handleAcceptRoute = (alert) => {
-    setCurrentAlert(null);
-    setMessages((prev) =>
-      prev.map((m) => m.id === alert.id ? { ...m, status: 'accepted' } : m)
-    );
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch driver data:", err);
+      setLoading(false);
+    }
   };
 
-  if (!truck) {
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const handleStartTrip = async () => {
+    if (!activeShipment) return;
+    setStartingTrip(true);
+    try {
+      await api.post(`/driver/shipments/${activeShipment.id}/start`);
+      await fetchData(); 
+    } catch (err) {
+      alert("Failed to start trip. Please try again.");
+    } finally {
+      setStartingTrip(false);
+    }
+  };
+
+  const handleMarkDelivered = async () => {
+    if (!activeShipment) return;
+    try {
+      await api.post(`/driver/shipments/${activeShipment.id}/delivered`);
+      await fetchData();
+    } catch (err) {
+      alert("Failed to mark delivered.");
+    }
+  }
+
+  if (loading || !truck) {
     return (
       <div className="h-screen flex items-center justify-center bg-brand-dark">
-        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin"></div>
+        <Loader2 className="w-8 h-8 text-neon-blue animate-spin" />
       </div>
     );
   }
 
-  const progressPercent = Math.round(truck.progress * 100);
+  const isAssigned = activeShipment?.assignmentStatus === 'ASSIGNED';
+  const isInProgress = activeShipment?.assignmentStatus === 'IN_PROGRESS';
+  const progressPercent = Math.round((truck.progress || 0) * 100);
 
   return (
     <div className="h-screen flex bg-brand-dark overflow-hidden">
-      {/* Sidebar */}
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col relative overflow-hidden">
         {/* Full-Screen Map */}
         <div className="flex-1 relative">
           <MapView
             center={[truck.currentPosition.lat, truck.currentPosition.lng]}
-            zoom={10}
+            zoom={isInProgress || isAssigned ? 10 : 13}
           >
             <TruckMarker truck={truck} isSelected onClick={() => {}} />
-            <RouteOverlay route={truck.route} isActive />
+            {(isInProgress || isAssigned) && truck.route && (
+              <RouteOverlay route={truck.route} isActive={isInProgress} />
+            )}
           </MapView>
 
-          {/* Top Info Bar — Google Maps style */}
-          <div className="absolute top-4 left-4 right-4 z-[1000] flex items-center justify-between">
-            {/* Route Info Pill */}
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md">
-              <Navigation size={16} className="text-neon-blue" />
-              <div>
-                <p className="text-white text-sm font-semibold">
-                  {truck.originName} → {truck.destinationName}
-                </p>
-                <p className="text-slate-400 text-xs">{truck.cargo}</p>
+          {/* HUD UI */}
+          <div className="absolute top-4 left-4 right-4 z-[1000] flex flex-col gap-3">
+            {!activeShipment && (
+              <div className="self-center px-4 py-2 rounded-full bg-slate-900/90 border border-white/10 backdrop-blur-md flex items-center gap-3 animate-pulse">
+                <div className="w-2 h-2 rounded-full bg-neon-blue shadow-[0_0_8px_#00f0ff]" />
+                <span className="text-white text-xs font-semibold tracking-wider uppercase">Searching for Shipments...</span>
               </div>
-            </div>
+            )}
 
-            {/* Messages Toggle */}
-            <button
-              onClick={() => setShowMessages(!showMessages)}
-              className="relative px-3 py-3 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md text-slate-300 hover:text-white transition-colors"
-            >
-              <MessageSquare size={18} />
-              {messages.filter(m => m.status === 'pending').length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-neon-blue text-[10px] text-white flex items-center justify-center font-bold">
-                  {messages.filter(m => m.status === 'pending').length}
-                </span>
-              )}
-            </button>
+            {isInProgress && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md min-w-0">
+                <Navigation size={16} className="text-neon-blue shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-xs md:text-sm font-semibold truncate">
+                    {truck.originName} → {truck.destinationName}
+                  </p>
+                  <p className="text-slate-400 text-[10px] md:text-xs truncate">{truck.cargo}</p>
+                </div>
+                <button
+                  onClick={() => setShowMessages(!showMessages)}
+                  className="relative p-2 text-slate-300 hover:text-white transition-colors"
+                >
+                  <MessageSquare size={18} />
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* AI Alert — appears in center top */}
-          {currentAlert && (
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000]">
-              <AINotification
-                alert={currentAlert}
-                isDriver
-                onApprove={handleAcceptRoute}
-                onDismiss={() => setCurrentAlert(null)}
-              />
+          {/* Parallel Assignment Window — Non-blocking, side-aligned */}
+          {isAssigned && (
+            <div className="absolute top-4 left-4 bottom-4 w-full max-w-[320px] pointer-events-none z-[1500] flex items-center md:items-start">
+              <div className="w-full bg-slate-900/95 border border-white/10 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-md animate-fade-in-left pointer-events-auto max-h-[90vh] flex flex-col">
+                <div className="p-5 flex-1 overflow-y-auto">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-neon-blue/10 border border-neon-blue/20 flex items-center justify-center shrink-0">
+                      <Package className="text-neon-blue" size={24} />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white leading-tight">New Journey Assigned</h2>
+                      <p className="text-slate-500 text-[11px] uppercase tracking-wider font-semibold">Active Assignment</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 mb-6">
+                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/8 transition-colors">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MapPin size={14} className="text-emerald-400" />
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Planned Route</span>
+                      </div>
+                      <p className="text-white text-sm font-semibold leading-relaxed">
+                        {activeShipment.warehouse?.name} 
+                        <span className="mx-2 text-slate-600">→</span> 
+                        {activeShipment.route?.destination}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/8 transition-colors">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Package size={14} className="text-neon-blue" />
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Cargo Details</span>
+                      </div>
+                      <p className="text-white text-sm font-semibold">
+                        {activeShipment.notes || "High Priority Parcel"}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/8 transition-colors">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock size={14} className="text-amber-400" />
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">Estimated Time</span>
+                      </div>
+                      <p className="text-white text-sm font-semibold">
+                        {activeShipment.route?.estimatedTime || "Calculating..."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleStartTrip}
+                    disabled={startingTrip}
+                    className="group relative w-full py-4 rounded-2xl bg-neon-blue text-brand-dark font-black text-sm hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(0,240,255,0.3)] disabled:opacity-50 overflow-hidden"
+                  >
+                    {startingTrip ? (
+                      <Loader2 className="animate-spin" size={18} />
+                    ) : (
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                        <Play size={18} className="fill-current" />
+                        START YOUR TRIP
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                <div className="p-4 bg-white/5 border-t border-white/5">
+                  <p className="text-[10px] text-slate-500 text-center italic">
+                    Assigned by Command Center • Real-time tracking enabled
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Messages Panel — slide from right */}
+          {/* Messages Panel */}
           {showMessages && (
-            <div className="absolute top-0 right-0 h-full w-96 z-[1000] border-l border-white/5 bg-slate-950/95 backdrop-blur-md">
+            <div className="absolute top-0 right-0 h-full w-full sm:w-96 z-[1000] border-l border-white/5 bg-slate-950/95 backdrop-blur-md">
               <DriverMessages
                 messages={messages}
                 onClose={() => setShowMessages(false)}
-                onAccept={(msgId) => {
-                  setMessages((prev) =>
-                    prev.map((m) => m.id === msgId ? { ...m, status: 'accepted' } : m)
-                  );
-                }}
+                onAccept={(msgId) => {}}
               />
             </div>
           )}
         </div>
 
-        {/* Bottom Trip Panel — Google Maps style */}
-        <div className={`border-t border-white/10 bg-slate-950/95 backdrop-blur-md transition-all duration-300 ${
-          bottomPanelExpanded ? 'h-44' : 'h-14'
-        }`}>
-          {/* Toggle Handle */}
-          <button
-            onClick={() => setBottomPanelExpanded(!bottomPanelExpanded)}
-            className="w-full flex items-center justify-center py-1 text-slate-500 hover:text-white transition-colors"
-          >
-            {bottomPanelExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-          </button>
+        {/* Bottom Trip Panel */}
+        {isInProgress && (
+          <div className={`border-t border-white/10 bg-slate-950/95 backdrop-blur-md transition-all duration-300 shrink-0 ${
+            bottomPanelExpanded ? 'h-56 md:h-52' : 'h-14'
+          }`}>
+            <button
+              onClick={() => setBottomPanelExpanded(!bottomPanelExpanded)}
+              className="w-full flex items-center justify-center py-1 text-slate-500 hover:text-white transition-colors"
+            >
+              {bottomPanelExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+            </button>
 
-          {!bottomPanelExpanded ? (
-            /* Collapsed — minimal info */
-            <div className="px-6 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <span className="text-neon-blue font-bold text-lg">{truck.eta}</span>
-                <span className="text-slate-400 text-sm">• {truck.distanceRemaining}</span>
-              </div>
-              <span className="text-slate-500 text-sm">{truck.speed} km/h</span>
-            </div>
-          ) : (
-            /* Expanded — full trip info */
-            <div className="px-6 pb-4">
-              {/* Progress Bar */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-emerald-400 text-xs font-medium">{truck.originName}</span>
-                  <span className="text-xs text-slate-500">{progressPercent}% complete</span>
-                  <span className="text-red-400 text-xs font-medium">{truck.destinationName}</span>
+            {!bottomPanelExpanded ? (
+              <div className="px-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-neon-blue font-bold text-lg">{truck.eta}</span>
+                  <span className="text-slate-400 text-sm">• {truck.distanceRemaining}</span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-neon-blue to-brand-primary transition-all duration-1000"
-                    style={{ width: `${progressPercent}%` }}
-                  ></div>
-                </div>
+                <span className="text-slate-500 text-sm">{truck.speed} km/h</span>
               </div>
+            ) : (
+              <div className="px-6 pb-4">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-emerald-400 text-xs font-medium">{truck.originName}</span>
+                    <span className="text-xs text-slate-500">{progressPercent}% complete</span>
+                    <span className="text-red-400 text-xs font-medium">{truck.destinationName}</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-neon-blue to-brand-primary transition-all duration-1000"
+                      style={{ width: `${progressPercent}%` }}
+                    ></div>
+                  </div>
+                </div>
 
-              {/* Stats Row */}
-              <div className="grid grid-cols-4 gap-3">
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
-                  <Clock size={14} className="text-neon-blue shrink-0" />
-                  <div>
-                    <p className="text-white text-sm font-semibold">{truck.eta}</p>
-                    <p className="text-slate-500 text-[10px]">ETA</p>
+                <div className="flex flex-col md:flex-row gap-4 items-center">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1 w-full">
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
+                      <Clock size={14} className="text-neon-blue shrink-0" />
+                      <div>
+                        <p className="text-white text-sm font-semibold">{truck.eta}</p>
+                        <p className="text-slate-500 text-[10px]">ETA</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
+                      <Gauge size={14} className="text-neon-blue shrink-0" />
+                      <div>
+                        <p className="text-white text-sm font-semibold">{truck.speed} km/h</p>
+                        <p className="text-slate-500 text-[10px]">Speed</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
-                  <MapPin size={14} className="text-neon-blue shrink-0" />
-                  <div>
-                    <p className="text-white text-sm font-semibold">{truck.distanceRemaining}</p>
-                    <p className="text-slate-500 text-[10px]">Distance</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
-                  <Gauge size={14} className="text-neon-blue shrink-0" />
-                  <div>
-                    <p className="text-white text-sm font-semibold">{truck.speed} km/h</p>
-                    <p className="text-slate-500 text-[10px]">Speed</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
-                  <Package size={14} className="text-neon-blue shrink-0" />
-                  <div>
-                    <p className="text-white text-sm font-semibold truncate">{truck.cargo}</p>
-                    <p className="text-slate-500 text-[10px]">Cargo</p>
-                  </div>
+                  
+                  <button 
+                    onClick={handleMarkDelivered}
+                    className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    MARK DELIVERED
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
+      <div className="md:hidden h-16 shrink-0" />
     </div>
   );
 }

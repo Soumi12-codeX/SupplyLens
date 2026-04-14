@@ -23,7 +23,11 @@ public class AdminController {
     private UserRepository userRepository;
 
     @GetMapping("/shipments")
-    public List<Shipment> getAll() {
+    public List<Shipment> getAll(@org.springframework.web.bind.annotation.RequestParam(required = false) Long warehouseId) {
+        System.out.println(">>> ADMIN FETCH SHIPMENTS - WarehouseID Filter: " + warehouseId);
+        if (warehouseId != null) {
+            return shipmentService.getShipmentsByWarehouse(warehouseId);
+        }
         return shipmentService.getAllShipments();
     }
     @GetMapping("/drivers/available")

@@ -3,5 +3,10 @@
     "@stomp/stompjs": "^7.3.0",
     "axios": "^1.15.0",
     "sockjs-client": "^1.6.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.9",
+    "tailwindcss": "^4.2.2"
   }
 }
