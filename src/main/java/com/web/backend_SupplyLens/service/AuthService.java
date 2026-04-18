@@ -17,21 +17,21 @@ import java.time.LocalDateTime;
 
 @Service
 public class AuthService {
-    
+
     // Fallback coordinate mapping for systemic consistency
     private static final java.util.Map<String, double[]> CITY_COORDINATES = new java.util.HashMap<>();
     static {
-        CITY_COORDINATES.put("Kolkata", new double[]{22.5726, 88.3639});
-        CITY_COORDINATES.put("Howrah", new double[]{22.5958, 88.2636});
-        CITY_COORDINATES.put("Mumbai", new double[]{19.0760, 72.8777});
-        CITY_COORDINATES.put("Delhi", new double[]{28.6139, 77.2090});
-        CITY_COORDINATES.put("Bangalore", new double[]{12.9716, 77.5946});
-        CITY_COORDINATES.put("Hyderabad", new double[]{17.3850, 78.4867});
-        CITY_COORDINATES.put("Chennai", new double[]{13.0827, 80.2707});
-        CITY_COORDINATES.put("Pune", new double[]{18.5204, 73.8567});
-        CITY_COORDINATES.put("Ahmedabad", new double[]{23.0225, 72.5714});
-        CITY_COORDINATES.put("Jaipur", new double[]{26.9124, 75.7873});
-        CITY_COORDINATES.put("Lucknow", new double[]{26.8467, 80.9462});
+        CITY_COORDINATES.put("Kolkata", new double[] { 22.5726, 88.3639 });
+        CITY_COORDINATES.put("Howrah", new double[] { 22.5958, 88.2636 });
+        CITY_COORDINATES.put("Mumbai", new double[] { 19.0760, 72.8777 });
+        CITY_COORDINATES.put("Delhi", new double[] { 28.6139, 77.2090 });
+        CITY_COORDINATES.put("Bangalore", new double[] { 12.9716, 77.5946 });
+        CITY_COORDINATES.put("Hyderabad", new double[] { 17.3850, 78.4867 });
+        CITY_COORDINATES.put("Chennai", new double[] { 13.0827, 80.2707 });
+        CITY_COORDINATES.put("Pune", new double[] { 18.5204, 73.8567 });
+        CITY_COORDINATES.put("Ahmedabad", new double[] { 23.0225, 72.5714 });
+        CITY_COORDINATES.put("Jaipur", new double[] { 26.9124, 75.7873 });
+        CITY_COORDINATES.put("Lucknow", new double[] { 26.8467, 80.9462 });
     }
 
     @Autowired
@@ -86,7 +86,7 @@ public class AuthService {
                     : "DRV";
             String generatedId;
             do {
-                int suffix = (int)(Math.random() * 9000) + 1000; // 4-digit: 1000–9999
+                int suffix = (int) (Math.random() * 9000) + 1000; // 4-digit: 1000–9999
                 generatedId = cityPrefix + "-" + suffix;
             } while (userRepo.findByDriverId(generatedId).isPresent());
             user.setDriverId(generatedId);
@@ -123,28 +123,35 @@ public class AuthService {
 
         User savedUser = userRepo.save(user);
 
+        if ("ADMIN".equalsIgnoreCase(savedUser.getRole()) && savedUser.getWarehouse() != null) {
+            Warehouse warehouse = savedUser.getWarehouse();
+            if (warehouse.getAdminUserId() == null) {
+                warehouse.setAdminUserId(savedUser.getId());
+                warehouseRepo.save(warehouse);
+            }
+        }
+
         // If it's a driver, initialize their location so they can be assigned shipments
         if ("DRIVER".equalsIgnoreCase(savedUser.getRole()) && savedUser.getDriverId() != null) {
             DriverLocation location = new DriverLocation();
             location.setDriverId(savedUser.getDriverId());
             location.setAvailable(true);
-            
+
             // Use registered coordinates if available, otherwise default to central India
             if (savedUser.getLatitude() != null && savedUser.getLongitude() != null) {
                 location.setLatitude(savedUser.getLatitude());
                 location.setLongitude(savedUser.getLongitude());
             } else {
-                location.setLatitude(20.5937); 
+                location.setLatitude(20.5937);
                 location.setLongitude(78.9629);
             }
-            
+
             location.setLastUpdated(LocalDateTime.now());
             driverLocationRepo.save(location);
 
             // New driver is available! Check if any shipments are waiting
             shipmentService.checkAndAssignPendingShipments();
         }
-
         return savedUser;
     }
 }
