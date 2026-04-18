@@ -25,7 +25,7 @@ function App() {
       <Route path="/admin/fleet" element={<FleetPage />} />
       <Route path="/admin/shipment" element={<CreateShipment />} />
       <Route path="/admin/drivers" element={<ManageDrivers />} />
-      <Route path="/admin/alerts" element={<AdminDashboard />} />
+      <Route path="/admin/alerts" element={<ComingSoonPage />} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/navigation" element={<DriverNavigation />} />
       <Route path="/driver/messages" element={<DriverMessagesPage />} />

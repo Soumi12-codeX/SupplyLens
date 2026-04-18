@@ -25,7 +25,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public User register(@RequestBody User user) {
-        System.out.println("REGISTER HIT");
+        System.out.println(">>> REGISTER HIT - Role: " + user.getRole() + ", Name: " + user.getUsername());
         return authService.register(user);
     }
 
@@ -35,7 +35,7 @@ public class AuthController {
     }
 
     @PostMapping("/driver/login")
-    public String driverLogin(@RequestBody User user) {
+    public AuthResponse driverLogin(@RequestBody User user) {
         return authService.driverLogin(user.getDriverId(), user.getPin());
     }
 }

@@ -48,5 +48,31 @@ dist/
 .eslintcache
 .stylelintcache
 .npm
-.eslintcache
 *.log
+
+### Python ###
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+.venv/
+*.egg-info/
+
+### OS ###
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### AI / Editor tools ###
+.antigravity/
+.gemini/
+
+### Temp / Scratch / Data files ###
+tmp_*.json
+*.csv
+trigger_demo.py
+populate_proximity_data.sql
+repopulate_routes.sql
+seed_hubs.sql
+seed_nodes.sql

@@ -5,26 +5,106 @@ import TruckMarker from '../../components/Map/TruckMarker';
 import RouteOverlay from '../../components/Map/RouteOverlay';
 import RoadConditionOverlay from '../../components/Map/RoadConditionOverlay';
 import AINotification from '../../components/AINotification';
-import { MockSimulator } from '../../services/mockData';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 import wsService from '../../services/websocket';
 import { Truck, AlertTriangle, Activity, X, CheckCircle, Navigation } from 'lucide-react';
 
 export default function LiveMapPage() {
+  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [fleet, setFleet] = useState([]);
   const [selectedTruck, setSelectedTruck] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [roadConditions, setRoadConditions] = useState([]);
-  const [mapCenter, setMapCenter] = useState([51.1657, 10.4515]); // Set to Germany center
-  const [mapZoom, setMapZoom] = useState(6);
+  const [mapCenter, setMapCenter] = useState([20.5937, 78.9629]); // India center
+  const [mapZoom, setMapZoom] = useState(5);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  const transformShipments = useCallback((backendShipments) => {
+    return backendShipments.map((s) => {
+      const origin = { 
+        lat: s.warehouse?.latitude || 20.5937, 
+        lng: s.warehouse?.longitude || 78.9629 
+      };
+      const dest = { 
+        lat: s.route?.latitude || origin.lat + 0.1, 
+        lng: s.route?.longitude || origin.lng + 0.1 
+      };
+      
+      const isUnassigned = s.assignmentStatus === "UNASSIGNED";
+      const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
+      
+      // Stagger base progress so they don't perfectly stack on the route line
+      const baseProgress = s.assignmentStatus === "DELIVERED" ? 1 : 0.02 + ((s.id % 20) * 0.04);
+      const progress = isStarted ? baseProgress : 0;
+
+      let status = "delayed";
+      if (s.assignmentStatus === "DELIVERED") status = "delivered";
+      else if (isStarted) status = "on-route";
+      else if (isUnassigned) status = "awaiting-dispatch";
+
+      // Apply a circular scatter to unassigned/idle trucks near origin
+      const jitterLat = (!isStarted && !isUnassigned) ? 0 : (Math.sin(s.id * 10) * 0.02);
+      const jitterLng = (!isStarted && !isUnassigned) ? 0 : (Math.cos(s.id * 10) * 0.02);
+
+      return {
+        id: `SHP-${s.id}`,
+        driver: s.assignedDriverId || "Awaiting Assignment",
+        originName: s.warehouse?.name || "Warehouse",
+        destinationName: s.route?.path?.split(" -> ").pop() || "Destination",
+        cargo: s.notes || "High Priority Goods",
+        status: status,
+        speed: isStarted ? 60 : 0,
+        progress: progress,
+        eta: s.route?.estimatedTime || "Pending",
+        distanceRemaining: s.route?.distance ? `${s.route.distance} km` : "200 km",
+        originPosition: origin,
+        destinationPosition: dest,
+        currentPosition: {
+          lat: origin.lat + (dest.lat - origin.lat) * progress + jitterLat,
+          lng: origin.lng + (dest.lng - origin.lng) * progress + jitterLng,
+        },
+        route: [] 
+      };
+    });
+  }, []);
 
   useEffect(() => {
-    const sim = new MockSimulator(
-      (updatedFleet) => setFleet(updatedFleet),
-      (alert) => setAlerts((prev) => [alert, ...prev].slice(0, 20)),
-      (condition) => setRoadConditions((prev) => [condition, ...prev].slice(0, 20))
-    );
-    sim.start();
+    const fetchShipments = async () => {
+      try {
+        const warehouseId = user?.warehouse?.id;
+        const url = warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments';
+        const res = await api.get(url);
+        const realShipments = transformShipments(res.data);
+        setFleet(realShipments);
+        setIsInitializing(false);
+      } catch (err) {
+        console.error("Error fetching shipments:", err);
+        setIsInitializing(false);
+      }
+    };
+
+    fetchShipments();
+    const pollInterval = setInterval(fetchShipments, 30000); // Poll every 30s
+    
+    // Local simulation for smooth progress
+    const simInterval = setInterval(() => {
+      setFleet(prevFleet => prevFleet.map(truck => {
+        if (truck.status === 'on-route' && truck.progress < 1) {
+          const newProgress = Math.min(1, truck.progress + 0.001);
+          // Interpolate position
+          const lat = truck.originPosition.lat + (truck.destinationPosition.lat - truck.originPosition.lat) * newProgress;
+          const lng = truck.originPosition.lng + (truck.destinationPosition.lng - truck.originPosition.lng) * newProgress;
+          return {
+             ...truck,
+             progress: newProgress,
+             currentPosition: { lat, lng }
+          };
+        }
+        return truck;
+      }));
+    }, 2000);
 
     // Subscribe to real WebSocket alerts
     wsService.connect();
@@ -40,7 +120,8 @@ export default function LiveMapPage() {
     });
 
     return () => {
-      sim.stop();
+      clearInterval(pollInterval);
+      clearInterval(simInterval);
       unsubscribe();
       wsService.disconnect();
     };
@@ -89,6 +170,15 @@ export default function LiveMapPage() {
 
         {/* Full-screen Map */}
         <div className="flex-1 relative">
+          {isInitializing ? (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-4 border-neon-blue border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-neon-blue text-sm font-medium tracking-wide">INITIALIZING LIVE FLEET...</p>
+              </div>
+            </div>
+          ) : null}
+
           <MapView center={mapCenter} zoom={mapZoom}>
             <RoadConditionOverlay conditions={roadConditions} />
             {fleet.map((truck) => (

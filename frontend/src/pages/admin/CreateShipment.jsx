@@ -35,8 +35,7 @@ export default function CreateShipment() {
   const [quantity, setQuantity] = useState('');
   const [priority, setPriority] = useState('standard');
   const [notes, setNotes] = useState('');
-  const [selectedRouteId, setSelectedRouteId] = useState(''); 
-  const [routeNodes, setRouteNodes] = useState('HAMBURG, HANOVER, FRANKFURT, MUNICH'); // AI Monitoring nodes
+  const [selectedRouteId, setSelectedRouteId] = useState('');
 
   const steps = [
     { num: 1, label: 'Route', icon: MapPin },
@@ -60,11 +59,13 @@ export default function CreateShipment() {
   const selectedPickup = warehouses.find(w => w.id === pickupWarehouse) || user?.warehouse;
   const selectedDelivery = warehouses.find(w => w.id === deliveryLocation);
 
-  // Filter routes that match the specific city names
-  const availableRoutes = routes.filter(r =>
-    r.source === selectedPickup?.name &&
-    r.destination === selectedDelivery?.name
-  );
+  // Filter routes by ID and sort by priority
+  const availableRoutes = routes
+    .filter(r =>
+      r.source?.id === selectedPickup?.id &&
+      r.destination?.id === selectedDelivery?.id
+    )
+    .sort((a, b) => (a.priority || 0) - (b.priority || 0));
 
   // Find the full object of the route chosen in the dropdown
   const selectedRouteData = routes.find(r => r.id === parseInt(selectedRouteId));
@@ -84,11 +85,9 @@ export default function CreateShipment() {
     setIsSubmitting(true);
     
     // Merge: Use upstream structure + AI routeNodes
-    const shipmentPayload = {
-      route: { id: parseInt(selectedRouteId) },
-      transport: { id: 2 }, 
-      routeNodes: routeNodes, // AI Feature
-      status: "CREATED",
+      const shipmentPayload = {
+        route: { id: parseInt(selectedRouteId) },
+        status: "CREATED",
       assignmentStatus: "ASSIGNED",
       // Extra details for record keeping
       notes: notes,
@@ -106,7 +105,8 @@ export default function CreateShipment() {
       }
     } catch (error) {
       console.error("Error creating shipment:", error);
-      alert("Failed to create shipment. Ensure backend matches the payload.");
+      const errorMsg = error.response?.data || error.message || "Unknown Error";
+      alert(`FAILED TO CREATE SHIPMENT:\n${errorMsg}\n\nPlease check the console for details.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -122,7 +122,6 @@ export default function CreateShipment() {
     setQuantity('');
     setPriority('standard');
     setNotes('');
-    setRouteNodes('HAMBURG, HANOVER, FRANKFURT, MUNICH');
     setSubmittedData(null);
   };
 
@@ -202,21 +201,7 @@ export default function CreateShipment() {
                       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                     </div>
 
-                    {/* Route Nodes Input */}
-                    <div className="mt-6">
-                      <label className="flex items-center gap-2 text-slate-300 text-sm font-medium mb-3">
-                        <ArrowRight size={14} className="text-neon-blue" />
-                        Planned Route Nodes
-                      </label>
-                      <input
-                        type="text"
-                        value={routeNodes}
-                        onChange={(e) => setRouteNodes(e.target.value)}
-                        placeholder="e.g. HAMBURG, HANOVER, FRANKFURT, MUNICH"
-                        className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/25 transition-all text-sm"
-                      />
-                      <p className="mt-2 text-[10px] text-slate-500 italic">Comma-separated sequence of cities for AI monitoring.</p>
-                    </div>
+
                   </div>
                   <div>
                     <label className="flex items-center gap-2 text-slate-300 text-sm font-medium mb-2"><Weight size={14} className="text-neon-blue" /> Weight (kg)</label>
@@ -249,18 +234,115 @@ export default function CreateShipment() {
                 </div>
                 <div className="space-y-3">
                   <label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Available Defined Routes</label>
-                  <select
-                    value={selectedRouteId}
-                    onChange={(e) => setSelectedRouteId(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white outline-none focus:border-neon-blue transition-all"
-                  >
-                    <option value="">-- Select a Route --</option>
-                    {routes.map((r) => (
-                      <option key={r.id} value={r.id} className="bg-slate-900">
-                        #{r.id} | {r.source} to {r.destination} ({r.distance}km)
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {availableRoutes.length === 0 ? (
+                      <p className="text-slate-500 text-sm italic py-4">No matching routes available.</p>
+                    ) : (
+                      availableRoutes.map((r, index) => {
+                        const isSelected = selectedRouteId === String(r.id);
+                        const nodes = r.path ? r.path.split(' -> ') : ['Direct Route'];
+                        const srcCode = (r.source?.name || 'SRC').split(' ')[0].slice(0, 3).toUpperCase();
+                        const dstCode = (r.destination?.name || 'DST').split(' ')[0].slice(0, 3).toUpperCase();
+                        const corridorLabel = `${srcCode} → ${dstCode} · P${index + 1}`;
+
+                        // --- Priority justification note ---
+                        const minDist = Math.min(...availableRoutes.map(x => x.distance));
+                        const maxDist = Math.max(...availableRoutes.map(x => x.distance));
+                        const stopCount = nodes.length - 2; // intermediate stops only
+                        const risk = (r.riskLevel || 'low').toLowerCase();
+
+                        let priorityNote = '';
+                        let noteColor = 'text-slate-400';
+
+                        if (index === 0) {
+                          // Always the highest-priority route
+                          if (r.distance === minDist && risk === 'low') {
+                            priorityNote = '⚡ Shortest path & lowest risk — recommended';
+                            noteColor = 'text-emerald-400';
+                          } else if (r.distance === minDist) {
+                            priorityNote = '⚡ Shortest distance — most time-efficient';
+                            noteColor = 'text-emerald-400';
+                          } else if (risk === 'low') {
+                            priorityNote = '🛡 Safest corridor — minimal disruption risk';
+                            noteColor = 'text-emerald-400';
+                          } else {
+                            priorityNote = '✅ Best available option for this corridor';
+                            noteColor = 'text-emerald-400';
+                          }
+                        } else if (index === availableRoutes.length - 1 && availableRoutes.length > 1) {
+                          // Last / fallback route
+                          if (r.distance === maxDist) {
+                            priorityNote = risk === 'high'
+                              ? '⚠ Longest path with elevated risk — fallback only'
+                              : '↔ Widest coverage — use when others are blocked';
+                            noteColor = risk === 'high' ? 'text-orange-400' : 'text-slate-400';
+                          } else {
+                            priorityNote = risk === 'high'
+                              ? '⚠ Higher risk corridor — use as last resort'
+                              : '↔ Alternative path — lower priority than peers';
+                            noteColor = risk === 'high' ? 'text-orange-400' : 'text-slate-400';
+                          }
+                        } else {
+                          // Middle route(s)
+                          if (stopCount === 0) {
+                            priorityNote = '→ Direct route, no intermediate stops';
+                            noteColor = 'text-cyan-400';
+                          } else if (risk === 'low') {
+                            priorityNote = `🛡 Low-risk path via ${stopCount} stop${stopCount > 1 ? 's' : ''}`;
+                            noteColor = 'text-cyan-400';
+                          } else if (risk === 'medium') {
+                            priorityNote = `⚖ Balanced option — moderate risk, ${stopCount} stop${stopCount > 1 ? 's' : ''}`;
+                            noteColor = 'text-yellow-400';
+                          } else {
+                            priorityNote = `↕ Trade-off route — ${r.distance}km via ${stopCount} hub${stopCount > 1 ? 's' : ''}`;
+                            noteColor = 'text-slate-400';
+                          }
+                        }
+
+                        return (
+                          <div 
+                            key={r.id}
+                            onClick={() => setSelectedRouteId(String(r.id))}
+                            className={`p-4 rounded-xl border cursor-pointer hover:bg-white/5 transition-all ${
+                              isSelected 
+                                ? 'bg-neon-blue/10 border-neon-blue/50 ring-1 ring-neon-blue/50' 
+                                : 'bg-white/3 border-white/10'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center mb-1">
+                              <div className="flex items-center gap-3">
+                                <span className={`flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${isSelected ? 'border-neon-blue border-[5px]' : 'border-slate-500'}`}></span>
+                                <div>
+                                  <span className={`font-bold tracking-wider text-sm ${isSelected ? 'text-neon-blue' : 'text-white'}`}>
+                                    {corridorLabel}
+                                  </span>
+                                  {priorityNote && (
+                                    <p className={`text-[10px] font-medium mt-0.5 ${noteColor}`}>{priorityNote}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-slate-400 font-mono text-sm bg-slate-900/50 px-2 py-0.5 rounded-md border border-white/5">{r.distance} KM</span>
+                            </div>
+                            
+                            <div className="pl-8 mt-2">
+                              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium leading-relaxed">
+                                {nodes.map((node, index) => (
+                                  <React.Fragment key={index}>
+                                    <span className={`px-2 py-1 rounded-md ${index === 0 || index === nodes.length - 1 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-300'}`}>
+                                      {node}
+                                    </span>
+                                    {index < nodes.length - 1 && (
+                                      <ArrowRight size={10} className="text-slate-600 mt-0.5" />
+                                    )}
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
 
                 {selectedRouteData ? (
@@ -275,10 +357,6 @@ export default function CreateShipment() {
                         <p className="text-white font-bold">{selectedRouteData.estimatedTime}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-500 uppercase">Risk Level</p>
-                        <p className="text-orange-400 font-bold uppercase text-xs">{selectedRouteData.riskLevel}</p>
-                      </div>
-                      <div className="text-right">
                         <p className="text-[10px] text-slate-500 uppercase">Route Status</p>
                         <p className="text-emerald-400 font-bold uppercase text-xs">{selectedRouteData.status}</p>
                       </div>
@@ -300,7 +378,9 @@ export default function CreateShipment() {
                 <div className="p-6 rounded-2xl bg-white/3 border border-white/10 space-y-4">
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
                     <h3 className="text-white font-bold">Dispatch Summary</h3>
-                    <span className="text-neon-blue font-mono text-xs">RT-{selectedRouteData?.id || 'N/A'}</span>
+                    <span className="text-neon-blue font-mono text-xs">
+                      {selectedRouteData ? `${(selectedRouteData.source?.name || 'SRC').split(' ')[0].slice(0,3).toUpperCase()} → ${(selectedRouteData.destination?.name || 'DST').split(' ')[0].slice(0,3).toUpperCase()} · P${availableRoutes.findIndex(r => r.id === selectedRouteData.id) + 1}` : 'N/A'}
+                    </span>
                   </div>
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm">
@@ -325,7 +405,7 @@ export default function CreateShipment() {
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">Vehicle Assigned:</span>
                         <span className="text-white font-bold">
-                          {submittedData ? (submittedData.transport?.id || "TRK-AUTO") : "Pending confirmation"}
+                          {submittedData ? (submittedData.transport?.id || "Auto-Selected Vehicle") : "Pending confirmation"}
                         </span>
                       </div>
                     </div>

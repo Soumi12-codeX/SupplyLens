@@ -10,12 +10,12 @@ import com.web.backend_SupplyLens.model.Route;
 @Repository
 public interface RouteRepository extends JpaRepository<Route, Long> {
     
-    // find routes by source city
-    List<Route> findBySource(String source);
+    // find routes by source warehouse ID
+    List<Route> findBySource_Id(Long sourceId);
     
-    // find routes by destination city
-    List<Route> findByDestination(String destination);
+    // find routes by destination warehouse ID
+    List<Route> findByDestination_Id(Long destinationId);
     
-    // find routes between two cities
-    List<Route> findBySourceAndDestination(String source, String destination);
+    // find routes between two warehouses
+    List<Route> findBySource_IdAndDestination_Id(Long sourceId, Long destinationId);
 }

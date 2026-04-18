@@ -54,6 +54,7 @@ public class JwtFilter extends OncePerRequestFilter {
             String token = authHeader.substring(7);
             String username = jwtService.extractUsername(token);
             String role = jwtService.extractRole(token);
+            if (role != null) role = role.toUpperCase();
 
             System.out.println(">>> JWT VALID - User: " + username + ", Role: " + role);
 
@@ -70,9 +71,9 @@ public class JwtFilter extends OncePerRequestFilter {
                         authorities);
 
                 SecurityContextHolder.getContext().setAuthentication(authToken);
-                System.out.println(">>> AUTH SET for: " + username);
+                System.out.println(">>> AUTH SUCCESS: Security context set for user: " + username + " with role: ROLE_" + role);
             } else {
-                System.out.println(">>> AUTH FAILED: User not found in database for token subject: " + username);
+                System.err.println(">>> AUTH FAILED: User " + username + " not found in database!");
             }
         } catch (Exception e) {
             System.out.println(">>> JWT VALIDATION ERROR: " + e.getMessage());

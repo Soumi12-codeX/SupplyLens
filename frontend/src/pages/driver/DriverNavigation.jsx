@@ -3,42 +3,157 @@ import Sidebar from '../../components/Sidebar';
 import MapView from '../../components/Map/MapView';
 import TruckMarker from '../../components/Map/TruckMarker';
 import RouteOverlay from '../../components/Map/RouteOverlay';
-import { MockSimulator } from '../../services/mockData';
-import { Navigation, Compass, MapPin, Clock, Gauge, ArrowUp, ArrowUpRight, ArrowRight as ArrowR } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
+import { Navigation, Compass, MapPin, Clock, Gauge, ArrowUp, ArrowUpRight, ArrowRight, ArrowUpLeft, ArrowLeft, CornerUpRight, CornerUpLeft, Loader2 } from 'lucide-react';
 
 export default function DriverNavigation() {
+  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [truck, setTruck] = useState(null);
+  const [activeShipment, setActiveShipment] = useState(null);
   const [navPanelOpen, setNavPanelOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [directions, setDirections] = useState([]);
+
+  const fetchData = async () => {
+    if (!user?.driverId) return;
+    try {
+      const locRes = await api.get(`/driver/location/${user.driverId}`);
+      const loc = locRes.data || { latitude: 20.5937, longitude: 78.9629 };
+
+      const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
+      const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED');
+      
+      setActiveShipment(current || null);
+
+      if (current) {
+        const realTruck = {
+          id: `TRK-${user.driverId}`,
+          currentPosition: { lat: loc.latitude, lng: loc.longitude },
+          status: current.assignmentStatus === 'IN_PROGRESS' ? 'on-route' : 'assigned',
+          route: (() => {
+            try {
+              return current.currentPath ? JSON.parse(current.currentPath) : null;
+            } catch (e) {
+              return null;
+            }
+          })(),
+          originName: current.warehouse?.name || "Origin Hub",
+          destinationName: current.route?.destination?.name || "Destination Hub",
+          cargo: current.notes || "Standard Cargo",
+          progress: current.assignmentStatus === 'IN_PROGRESS' ? 0.35 : 0, 
+          speed: current.assignmentStatus === 'IN_PROGRESS' ? 65 : 0,
+          eta: current.route?.estimatedTime || "N/A",
+          distanceRemaining: "Calculating..."
+        };
+        setTruck(realTruck);
+      } else {
+        // Idle state
+        setTruck({
+          id: `TRK-${user.driverId}`,
+          currentPosition: { lat: loc.latitude, lng: loc.longitude },
+          status: 'idle',
+          originName: "Base",
+          destinationName: "N/A",
+          progress: 0,
+          speed: 0
+        });
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch navigation data:", err);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const sim = new MockSimulator(
-      (fleet) => setTruck(fleet[0]),
-      () => {}
-    );
-    sim.start();
-    return () => sim.stop();
-  }, []);
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
 
-  if (!truck) {
+  // Turn-by-Turn generator from real routing points
+  useEffect(() => {
+    if (!truck || !truck.route || truck.route.length < 2) return;
+
+    const fetchOSRM = async () => {
+      try {
+        const coordsStr = truck.route.map(p => `${p.lng},${p.lat}`).join(';');
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordsStr}?steps=true`);
+        const data = await res.json();
+
+        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+          const legs = data.routes[0].legs;
+          const allSteps = [];
+
+          const getDirectionIcon = (modifier) => {
+            if (!modifier) return ArrowUp;
+            if (modifier.includes('right')) {
+              if (modifier.includes('slight')) return ArrowUpRight;
+              if (modifier.includes('sharp')) return CornerUpRight;
+              return ArrowRight;
+            }
+            if (modifier.includes('left')) {
+              if (modifier.includes('slight')) return ArrowUpLeft;
+              if (modifier.includes('sharp')) return CornerUpLeft;
+              return ArrowLeft;
+            }
+            if (modifier === 'uturn') return ArrowUp;
+            return ArrowUp;
+          };
+
+          legs.forEach(leg => {
+            leg.steps.forEach((step, index) => {
+              if (step.distance < 10 && step.maneuver.type === 'continue') return; // skip trivial mini-steps
+
+              const modifier = step.maneuver.modifier;
+              const type = step.maneuver.type;
+              const name = step.name ? step.name : "Unnamed Road";
+              const distStr = step.distance >= 1000 ? (step.distance/1000).toFixed(1) + " km" : Math.round(step.distance) + " m";
+
+              let instr = `Continue on ${name}`;
+              if (type === 'depart') instr = `Head ${modifier || 'straight'} on ${name}`;
+              else if (type === 'turn') instr = `Turn ${modifier || 'right'} onto ${name}`;
+              else if (type === 'arrive') instr = `Arrive at destination`;
+              else if (type === 'roundabout') instr = `Take roundabout onto ${name}`;
+              else if (type === 'merge') instr = `Merge onto ${name}`;
+              else if (type === 'on ramp' || type === 'off ramp') instr = `Take ramp onto ${name}`;
+
+              instr = instr.replace(/ onto Unnamed Road$/, '').replace(/ on Unnamed Road$/, '').trim();
+              if (instr.endsWith('onto')) instr = instr.replace('onto', '').trim();
+
+              allSteps.push({
+                icon: getDirectionIcon(modifier),
+                instruction: instr || "Maintain current direction",
+                distance: distStr,
+                active: allSteps.length === 0, // First step is active
+              });
+            });
+          });
+
+          setDirections(allSteps.slice(0, 20)); // Limit to first 20 steps
+        }
+      } catch (err) {
+        console.error("OSRM steps fetch error:", err);
+      }
+    };
+
+    fetchOSRM();
+  }, [truck?.route]);
+
+  if (loading || !truck) {
     return (
       <div className="h-screen flex items-center justify-center bg-brand-dark">
-        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 text-neon-blue animate-spin" />
       </div>
     );
   }
 
   const progress = Math.round(truck.progress * 100);
-
-  // Simulated turn-by-turn directions
-  const directions = [
-    { icon: ArrowUp, instruction: 'Continue straight on NH-48', distance: '12.4 km', active: true },
-    { icon: ArrowUpRight, instruction: 'Take exit toward Pune Highway', distance: '3.2 km', active: false },
-    { icon: ArrowR, instruction: 'Turn right onto MG Road', distance: '800 m', active: false },
-    { icon: ArrowUp, instruction: 'Continue on MG Road', distance: '5.6 km', active: false },
-    { icon: ArrowUpRight, instruction: 'Merge onto Ring Road', distance: '2.1 km', active: false },
-    { icon: ArrowR, instruction: 'Destination on your right', distance: '200 m', active: false },
-  ];
+  
+  // Get active step info for banner
+  const activeStep = directions.length > 0 ? directions[0] : null;
 
   return (
     <div className="h-screen flex bg-brand-dark overflow-hidden">
@@ -66,15 +181,17 @@ export default function DriverNavigation() {
           </div>
 
           {/* Next Turn Banner */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2.5 md:px-5 md:py-3 rounded-xl bg-neon-blue/15 border border-neon-blue/30 backdrop-blur-md">
-            <div className="flex items-center gap-2 md:gap-3">
-              <ArrowUp size={18} className="text-neon-blue" />
-              <div>
-                <p className="text-white text-xs md:text-sm font-semibold">Continue straight</p>
-                <p className="text-neon-blue text-[10px] md:text-xs">12.4 km ahead</p>
+          {activeStep && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2.5 md:px-5 md:py-3 rounded-xl bg-neon-blue/15 border border-neon-blue/30 backdrop-blur-md">
+              <div className="flex items-center gap-2 md:gap-3">
+                <activeStep.icon size={18} className="text-neon-blue" />
+                <div>
+                  <p className="text-white text-xs md:text-sm font-semibold">{activeStep.instruction}</p>
+                  <p className="text-neon-blue text-[10px] md:text-xs">{activeStep.distance} ahead</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Mobile: Toggle nav panel button */}
           <button

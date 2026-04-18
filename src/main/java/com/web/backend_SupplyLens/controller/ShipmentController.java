@@ -31,7 +31,14 @@ public class ShipmentController {
 
     @PostMapping("/create")
     public ResponseEntity<?> createShipment(@RequestBody Shipment shipment, @RequestParam Long warehouseId) {
-        return ResponseEntity.ok(shipmentService.creatAndAssign(shipment, warehouseId));
+        try {
+            System.out.println(">>> CONTROLLER: Creating shipment for warehouse " + warehouseId);
+            return ResponseEntity.ok(shipmentService.creatAndAssign(shipment, warehouseId));
+        } catch (Exception e) {
+            System.err.println(">>> CONTROLLER ERROR: Failed to create shipment!");
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
     }
 
     @PostMapping("/{id}/delivered")
@@ -43,6 +50,9 @@ public class ShipmentController {
         locationRepo.findByDriverId(s.getAssignedDriverId()).ifPresent(loc -> {
             loc.setAvailable(true);
             locationRepo.save(loc);
+            
+            // Trigger auto-assignment for waiting shipments
+            shipmentService.checkAndAssignPendingShipments();
         });
         return ResponseEntity.ok("Delivered");
     }

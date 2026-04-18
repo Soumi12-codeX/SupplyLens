@@ -14,14 +14,18 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     List<Shipment> findByTransport_Driver_DriverId(String driverId);
     // for AlertService.updateShipments() - findById(Long) now works correctly
     // for ShipmentService - assigned driver queries
-    List<Shipment> findByAssignedDriverId(String driverId);
+    @Query("SELECT s FROM Shipment s JOIN FETCH s.warehouse JOIN FETCH s.route WHERE s.assignedDriverId = :driverId")
+    List<Shipment> findByAssignedDriverId(@Param("driverId") String driverId);
     
-    // for admin - see all shipments from their warehouse
-    List<Shipment> findByWarehouse_Id(Long warehouseId);
+    // for admin - see all shipments from their warehouse with full details
+    @Query("SELECT s FROM Shipment s JOIN FETCH s.warehouse JOIN FETCH s.route WHERE s.warehouse.id = :warehouseId")
+    List<Shipment> findByWarehouse_Id(@Param("warehouseId") Long warehouseId);
     
-    // for admin - filter by status
-    List<Shipment> findByAssignmentStatus(String status);
+    // Find shipments that need a driver: either explicitly UNASSIGNED 
+    // or ASSIGNED but missing a driver ID (stuck shipments)
+    @Query("SELECT s FROM Shipment s WHERE s.assignmentStatus = 'UNASSIGNED' OR (s.assignmentStatus = 'ASSIGNED' AND s.assignedDriverId IS NULL)")
+    List<Shipment> findPendingAssignments();
 
-    @Query("SELECT s FROM Shipment s WHERE s.route.routeNodes LIKE %:nodeName%")
+    @Query("SELECT s FROM Shipment s WHERE s.route.path LIKE %:nodeName%")
     List<Shipment> findAffectedByNode(@Param("nodeName") String nodeName);
 }

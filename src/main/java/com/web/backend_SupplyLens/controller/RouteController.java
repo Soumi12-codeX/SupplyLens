@@ -3,14 +3,19 @@ package com.web.backend_SupplyLens.controller;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.web.backend_SupplyLens.model.Route;
+import com.web.backend_SupplyLens.model.TransitNode;
+import com.web.backend_SupplyLens.dto.RouteDTO;
 import com.web.backend_SupplyLens.repository.RouteRepository;
 import com.web.backend_SupplyLens.service.RedirectService;
+import com.web.backend_SupplyLens.repository.TransitNodeRepository;
 
 @RestController
 @RequestMapping("/api/route")
@@ -22,6 +27,9 @@ public class RouteController {
     @Autowired
     private RedirectService redirectService;
 
+    @Autowired
+    private TransitNodeRepository transitNodeRepo;
+
     @PostMapping("/create")
     public ResponseEntity<?> createRoute(@RequestBody Route route) {
         return ResponseEntity.ok(routeRepo.save(route));
@@ -30,6 +38,21 @@ public class RouteController {
     @GetMapping("/all")
     public List<Route> getAllRoutes() {
         return routeRepo.findAll();
+    }
+
+    @GetMapping("/detailed")
+    public List<RouteDTO> getDetailedRoutes() {
+        List<Route> routes = routeRepo.findAll();
+        return routes.stream().map(route -> {
+            List<TransitNode> nodes = new ArrayList<>();
+            if (route.getPath() != null && !route.getPath().isEmpty()) {
+                String[] cityNames = route.getPath().split(" -> ");
+                for (String cityName : cityNames) {
+                    transitNodeRepo.findByName(cityName.trim()).ifPresent(nodes::add);
+                }
+            }
+            return new RouteDTO(route, nodes);
+        }).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")

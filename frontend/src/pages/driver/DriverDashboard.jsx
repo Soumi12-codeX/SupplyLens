@@ -28,7 +28,7 @@ export default function DriverDashboard() {
     if (!user?.driverId) return;
     try {
       const locRes = await api.get(`/driver/location/${user.driverId}`);
-      const loc = locRes.data;
+      const loc = locRes.data || { latitude: 20.5937, longitude: 78.9629 };
 
       const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
       const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
@@ -41,9 +41,16 @@ export default function DriverDashboard() {
           currentPosition: { lat: loc.latitude, lng: loc.longitude },
           status: current ? 'assigned' : 'idle',
           // Show route even if just assigned
-          route: current?.currentPath ? JSON.parse(current.currentPath) : null,
+          route: (() => {
+            try {
+              return current?.currentPath ? JSON.parse(current.currentPath) : null;
+            } catch (e) {
+              console.error("Failed to parse currentPath", e);
+              return null;
+            }
+          })(),
           originName: current?.warehouse?.name || "Base",
-          destinationName: current?.route?.destination || "N/A",
+          destinationName: current?.route?.destination?.name || "N/A",
           cargo: current?.notes || "No cargo",
           progress: 0,
           speed: 0,
@@ -56,9 +63,16 @@ export default function DriverDashboard() {
           id: `TRK-${user.driverId}`,
           currentPosition: { lat: loc.latitude, lng: loc.longitude },
           status: 'on-route',
-          route: JSON.parse(current.currentPath || '[]'),
+          route: (() => {
+            try {
+              return JSON.parse(current.currentPath || '[]');
+            } catch (e) {
+              console.error("Failed to parse currentPath", e);
+              return [];
+            }
+          })(),
           originName: current.warehouse?.name,
-          destinationName: current.route?.destination,
+          destinationName: current.route?.destination?.name || "N/A",
           cargo: current.notes,
           progress: 0.35, 
           speed: 65,
@@ -79,6 +93,43 @@ export default function DriverDashboard() {
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [user]);
+
+  // --- Route-Snapped Simulator Engine ---
+  useEffect(() => {
+    if (activeShipment?.assignmentStatus !== 'IN_PROGRESS' || !truck?.route || truck.route.length === 0) return;
+
+    let currentStep = 0;
+    const simulationInterval = setInterval(async () => {
+      if (currentStep >= truck.route.length) {
+        clearInterval(simulationInterval);
+        return;
+      }
+
+      const nextNode = truck.route[currentStep];
+      
+      // Update local state for immediate feedback
+      setTruck(prev => ({
+        ...prev,
+        currentPosition: { lat: nextNode.lat, lng: nextNode.lng },
+        progress: (currentStep / (truck.route.length - 1)) * 100
+      }));
+
+      // Sync with backend (POST update)
+      try {
+        await api.post('/driver/location', {
+          driverId: user.driverId,
+          latitude: nextNode.lat,
+          longitude: nextNode.lng
+        });
+      } catch (err) {
+        console.warn("Simulation sync delay:", err.message);
+      }
+
+      currentStep++;
+    }, 5000); // Move every 5 seconds along the blue line
+
+    return () => clearInterval(simulationInterval);
+  }, [activeShipment?.assignmentStatus, truck?.route?.length]);
 
   const handleStartTrip = async () => {
     if (!activeShipment) return;
@@ -184,7 +235,7 @@ export default function DriverDashboard() {
                       <p className="text-white text-sm font-semibold leading-relaxed">
                         {activeShipment.warehouse?.name} 
                         <span className="mx-2 text-slate-600">→</span> 
-                        {activeShipment.route?.destination}
+                        {activeShipment.route?.destination?.name || "N/A"}
                       </p>
                     </div>
 

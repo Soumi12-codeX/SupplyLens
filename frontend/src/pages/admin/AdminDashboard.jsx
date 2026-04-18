@@ -4,6 +4,7 @@ import MapView from '../../components/Map/MapView';
 import TruckMarker from '../../components/Map/TruckMarker';
 import RouteOverlay from '../../components/Map/RouteOverlay';
 import RoadConditionOverlay from '../../components/Map/RoadConditionOverlay';
+import WarehouseMarker from '../../components/Map/WarehouseMarker';
 import TruckList from './TruckList';
 import TruckDetail from './TruckDetail';
 import AINotification from '../../components/AINotification';
@@ -84,31 +85,44 @@ export default function AdminDashboard() {
           lng: s.warehouse?.longitude || 78.9629 
         };
         const dest = { 
-          lat: s.route?.latitude || origin.lat + 2, 
-          lng: s.route?.longitude || origin.lng + 2 
+          lat: s.route?.latitude || origin.lat + 0.1, 
+          lng: s.route?.longitude || origin.lng + 0.1 
         };
         
+        const isUnassigned = s.assignmentStatus === "UNASSIGNED";
         const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
-        const progress = s.assignmentStatus === "DELIVERED" ? 1 : 0.05;
+        
+        // Stagger base progress so they don't perfectly stack on the route line
+        const baseProgress = s.assignmentStatus === "DELIVERED" ? 1 : 0.02 + ((s.id % 20) * 0.04);
+        const progress = isStarted ? baseProgress : 0;
+
+        let status = "delayed";
+        if (s.assignmentStatus === "DELIVERED") status = "delivered";
+        else if (isStarted) status = "on-route";
+        else if (isUnassigned) status = "awaiting-dispatch";
+
+        // Apply a circular scatter to unassigned/idle trucks near origin
+        const jitterLat = (!isStarted && !isUnassigned) ? 0 : (Math.sin(s.id * 10) * 0.02);
+        const jitterLng = (!isStarted && !isUnassigned) ? 0 : (Math.cos(s.id * 10) * 0.02);
 
         return {
           id: `SHP-${s.id}`,
-          driver: s.assignedDriverId || "Not Assigned",
+          driver: s.assignedDriverId || "Awaiting Assignment",
           originName: s.warehouse?.name || "Warehouse",
-          destinationName: s.route?.destination || "Destination",
+          destinationName: s.route?.path?.split(" -> ").pop() || "Destination",
           cargo: s.notes || "High Priority Goods",
-          status: s.assignmentStatus === "DELIVERED" ? "delivered" : (isStarted ? "on-route" : "delayed"),
+          status: status,
           speed: isStarted ? 60 : 0,
           progress: progress,
-          eta: s.route?.estimatedTime || "5h",
+          eta: s.route?.estimatedTime || "Pending",
           distanceRemaining: s.route?.distance ? `${s.route.distance} km` : "200 km",
           originPosition: origin,
           destinationPosition: dest,
           currentPosition: {
-            lat: origin.lat + (dest.lat - origin.lat) * progress,
-            lng: origin.lng + (dest.lng - origin.lng) * progress,
+            lat: origin.lat + (dest.lat - origin.lat) * progress + jitterLat,
+            lng: origin.lng + (dest.lng - origin.lng) * progress + jitterLng,
           },
-          route: [] // Map will draw straight line or we could fetch route points
+          route: [] 
         };
       });
   };
@@ -131,6 +145,17 @@ export default function AdminDashboard() {
   const highCount     = alerts.filter((a) => a.severity === 'high').length;
   const blockedRoads  = roadConditions.filter((c) => c.condition === 'blocked').length;
   const congestedRoads = roadConditions.filter((c) => c.condition !== 'blocked').length;
+
+  // Extract unique warehouses from fleet
+  const warehouses = React.useMemo(() => {
+    const wMap = new Map();
+    fleet.forEach(t => {
+      if (t.originName && t.originPosition) {
+        wMap.set(`orig-${t.originName}`, { name: t.originName, position: t.originPosition, type: 'origin' });
+      }
+    });
+    return Array.from(wMap.values());
+  }, [fleet]);
 
   const stats = [
     { label: 'Active Trucks',  value: fleet.filter((t) => t.status === 'on-route').length, icon: Truck,          color: 'text-neon-blue'  },
@@ -273,6 +298,10 @@ export default function AdminDashboard() {
             <MapView center={mapCenter} zoom={mapZoom}>
               {/* Road condition overlays — drawn first so truck markers sit on top */}
               <RoadConditionOverlay conditions={roadConditions} />
+
+              {warehouses.map(w => (
+                <WarehouseMarker key={`${w.type}-${w.name}`} name={w.name} position={w.position} type={w.type} />
+              ))}
 
               {fleet.map((truck) => (
                 <React.Fragment key={truck.id}>

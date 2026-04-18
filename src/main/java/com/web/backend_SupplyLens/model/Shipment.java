@@ -1,5 +1,6 @@
 package com.web.backend_SupplyLens.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -25,7 +26,11 @@ public class Shipment {
     private String priority;
 
     private String routeStatus; //normal, rerouted
+
+    @Column(columnDefinition = "TEXT")
     private String currentPath; //set when admin selects a route
+
+    @Column(columnDefinition = "TEXT")
     private String routeNodes; // Comma-separated list of nodes like "HAMBURG,HANOVER,FRANKFURT,MUNICH"
 
     private String assignedDriverId;

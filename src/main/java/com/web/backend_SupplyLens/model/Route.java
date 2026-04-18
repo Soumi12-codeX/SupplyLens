@@ -1,28 +1,39 @@
 package com.web.backend_SupplyLens.model;
-
-import java.time.LocalTime;
-
+ 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 @Entity
+@Table(name = "routes")
 public class Route {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String source;
-    private String destination;
+    @ManyToOne
+    @JoinColumn(name = "source_id")
+    private Warehouse source;
+
+    @ManyToOne
+    @JoinColumn(name = "destination_id")
+    private Warehouse destination;
+
     private double distance;
-    private LocalTime estimatedTime;
+    private String estimatedTime;
     private String riskLevel; //low, medium, high
     private String status; //active, rerouted, blocked
-    @Column(name = "route_nodes", columnDefinition="TEXT")
-    private String routeNodes; //Stores "Mumbai, Pune, Bangalore"
+    
+    @Column(columnDefinition="TEXT")
+    private String path; //Stores the display path like "Anantapur -> Kurnool"
+
+    private int priority;
 
     public Long getId() {
         return id;
@@ -30,16 +41,16 @@ public class Route {
     public void setId(Long id) {
         this.id = id;
     }
-    public String getSource() {
+    public Warehouse getSource() {
         return source;
     }
-    public void setSource(String source) {
+    public void setSource(Warehouse source) {
         this.source = source;
     }
-    public String getDestination() {
+    public Warehouse getDestination() {
         return destination;
     }
-    public void setDestination(String destination) {
+    public void setDestination(Warehouse destination) {
         this.destination = destination;
     }
     public double getDistance() {
@@ -48,10 +59,10 @@ public class Route {
     public void setDistance(double distance) {
         this.distance = distance;
     }
-    public LocalTime getEstimatedTime() {
+    public String getEstimatedTime() {
         return estimatedTime;
     }
-    public void setEstimatedTime(LocalTime estimatedTime) {
+    public void setEstimatedTime(String estimatedTime) {
         this.estimatedTime = estimatedTime;
     }
     public String getRiskLevel() {
@@ -66,10 +77,24 @@ public class Route {
     public void setStatus(String status) {
         this.status = status;
     }
-    public String getRouteNodes(){
-        return routeNodes;
+    public String getPath() {
+        return path;
     }
-    public void setRouteNodes(String routeNodes){
-        this.routeNodes = routeNodes;
+    public void setPath(String path) {
+        this.path = path;
+    }
+    public int getPriority() {
+        return priority;
+    }
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    // Keep legacy support for routeNodes if needed by DTOs/other services
+    public String getRouteNodes() {
+        return path;
+    }
+    public void setRouteNodes(String routeNodes) {
+        this.path = routeNodes;
     }
 }

@@ -65,17 +65,19 @@ export const AuthProvider = ({ children }) => {
           driverId: data.driverId,
           pin: data.pin
         });
-        const token = res.data;
+        const token = res.data.token;
+        const userData = res.data.user;
+        
         localStorage.setItem('token', token);
         localStorage.setItem('role', 'driver');
         localStorage.setItem('driverId', data.driverId);
-        localStorage.setItem('name', data.name || 'Driver');
+        localStorage.setItem('name', userData.username);
 
         setUser({
           token,
           role: 'driver',
           driverId: data.driverId,
-          name: data.name || 'Driver'
+          name: userData.username
         });
       }
       return { success: true };
@@ -99,13 +101,16 @@ export const AuthProvider = ({ children }) => {
         }
         : {
           username: data.name,
-          driverId: data.driverId,
           pin: data.pin,
-          role: 'DRIVER'
+          role: 'DRIVER',
+          city: data.city,
+          latitude: data.latitude,
+          longitude: data.longitude
         };
 
-      await api.post('/auth/register', payload);
-      return { success: true };
+      const res = await api.post('/auth/register', payload);
+      const assignedDriverId = role === 'driver' ? res.data?.driverId : null;
+      return { success: true, driverId: assignedDriverId };
     } catch (err) {
       return {
         success: false,

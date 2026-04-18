@@ -25,19 +25,28 @@ export default function FleetPage() {
         const res = await api.get(url);
         console.log('[FleetPage] Received shipments:', res.data.length);
         // Map backend Shipment to UI format
-        const mapped = res.data.map(s => ({
-          id: `SHP-${s.id}`,
-          driver: s.assignedDriverId || "Unassigned",
-          phone: "+91 98765 43210", // Placeholder if not in backend
-          originName: s.warehouse?.name || "Warehouse",
-          destinationName: s.route?.destination || "Destination",
-          cargo: "Industrial Goods", // Placeholder or from notes
-          status: s.assignmentStatus === "IN_PROGRESS" ? "on-route" : 
-                  s.assignmentStatus === "ASSIGNED" ? "on-route" : "delayed",
-          speed: s.assignmentStatus === "IN_PROGRESS" ? 65 : 0,
-          progress: s.assignmentStatus === "DELIVERED" ? 1 : (s.assignmentStatus === "IN_PROGRESS" ? 0.4 : 0),
-          eta: s.route?.estimatedTime || "4h",
-        }));
+        const mapped = res.data.map(s => {
+          const isUnassigned = s.assignmentStatus === "UNASSIGNED";
+          const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
+          
+          let status = "delayed";
+          if (s.assignmentStatus === "DELIVERED") status = "delivered";
+          else if (isStarted) status = "on-route";
+          else if (isUnassigned) status = "awaiting-dispatch";
+
+          return {
+            id: `SHP-${s.id}`,
+            driver: s.assignedDriverId || "Awaiting Assignment",
+            phone: s.assignmentStatus === "UNASSIGNED" ? "Driver pending..." : "+91 98765 43210",
+            originName: s.warehouse?.name || "Warehouse",
+            destinationName: s.route?.path?.split(" -> ").pop() || "Destination",
+            cargo: s.notes || "Industrial Goods",
+            status: status,
+            speed: isStarted ? 65 : 0,
+            progress: s.assignmentStatus === "DELIVERED" ? 1 : (isStarted && !isUnassigned ? 0.4 : 0),
+            eta: s.route?.estimatedTime || "Pending",
+          };
+        });
         setFleet(mapped);
       } catch (err) {
         console.error("Failed to fetch fleet data:", err);

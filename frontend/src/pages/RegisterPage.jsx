@@ -1,8 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Truck, Eye, EyeOff, ArrowLeft, UserPlus, Box } from 'lucide-react';
+import { Shield, Truck, Eye, EyeOff, ArrowLeft, UserPlus, Box, MapPin } from 'lucide-react';
 import api from '../services/api.js';
+
+const CITY_COORDINATES = {
+  // Primary Hubs
+  'Kolkata': { lat: 22.5726, lon: 88.3639 },
+  'Mumbai': { lat: 19.0760, lon: 72.8777 },
+  'Bangalore': { lat: 12.9716, lon: 77.5946 },
+  'Hyderabad': { lat: 17.3850, lon: 78.4867 },
+  'Chennai': { lat: 13.0827, lon: 80.2707 },
+  'Pune': { lat: 18.5204, lon: 73.8567 },
+  'Ahmedabad': { lat: 23.0225, lon: 72.5714 },
+  'Jaipur': { lat: 26.9124, lon: 75.7873 },
+  'Lucknow': { lat: 26.8467, lon: 80.9462 },
+  
+  // Kolkata Nearby
+  'Salt Lake': { lat: 22.5866, lon: 88.4116 },
+  'Newtown': { lat: 22.5746, lon: 88.4735 },
+  'Hooghly': { lat: 22.9010, lon: 88.3899 },
+  'Durgapur': { lat: 23.5204, lon: 87.3119 },
+  'Asansol': { lat: 23.6739, lon: 86.9524 },
+  'Kharagpur': { lat: 22.3302, lon: 87.3237 },
+  'Haldia': { lat: 22.0257, lon: 88.0583 },
+
+  // Mumbai/Pune Nearby
+  'Thane': { lat: 19.2183, lon: 72.9781 },
+  'Navi Mumbai': { lat: 19.0330, lon: 73.0297 },
+  'Kalyan': { lat: 19.2403, lon: 73.1305 },
+  'Pimpri-Chinchwad': { lat: 18.6298, lon: 73.7997 },
+
+  // Jaipur Nearby (within 200km)
+  'Ajmer': { lat: 26.4499, lon: 74.6399 },
+
+  // Lucknow Nearby (within 200km)
+  'Kanpur': { lat: 26.4499, lon: 80.3319 },
+  'Prayagraj': { lat: 25.4358, lon: 81.8463 },
+
+  // Bangalore Nearby
+  'Hosur': { lat: 12.7409, lon: 77.8253 },
+  'Tumkur': { lat: 13.3392, lon: 77.1016 },
+  'Mysore': { lat: 12.2958, lon: 76.6394 },
+
+  // Hyderabad Nearby
+  'Secunderabad': { lat: 17.4399, lon: 78.4983 },
+  'Warangal': { lat: 17.9689, lon: 79.5941 },
+
+  // Chennai Nearby
+  'Kanchipuram': { lat: 12.8185, lon: 79.6947 },
+  'Tiruvallur': { lat: 13.1492, lon: 79.9071 },
+
+  // Ahmedabad Nearby (within 200km)
+  'Gandhinagar': { lat: 23.2156, lon: 72.6369 },
+  'Vadodara': { lat: 22.3072, lon: 73.1812 },
+};
 
 export default function RegisterPage() {
   const [selectedRole, setSelectedRole] = useState(null);
@@ -10,9 +62,12 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [driverId, setDriverId] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [assignedDriverId, setAssignedDriverId] = useState(null);
+  const [city, setCity] = useState('');
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [warehouseId, setWarehouseId] = useState('');
   const [warehouses, setWarehouses] = useState([]);
@@ -55,8 +110,8 @@ export default function RegisterPage() {
         setError('PIN must be at least 4 characters');
         return;
       }
-      if (!driverId) {
-        setError('Driver ID is required');
+      if (!city) {
+        setError('Please select your base city');
         return;
       }
     }
@@ -68,14 +123,20 @@ export default function RegisterPage() {
       email,
       password,
       warehouseId,
-      driverId,
-      pin
+      pin,
+      city,
+      latitude,
+      longitude
     });
 
     setIsLoading(false);
 
     if (result.success) {
-      navigate('/login');
+      if (selectedRole === 'driver' && result.driverId) {
+        setAssignedDriverId(result.driverId);
+      } else {
+        navigate('/login');
+      }
     } else {
       setError(result.message);
     }
@@ -269,17 +330,32 @@ export default function RegisterPage() {
             {/* DRIVER FIELDS */}
             {selectedRole === 'driver' && (
               <>
-                {/* Driver ID */}
+                {/* Driver ID - REMOVED: now auto-assigned by backend */}
+
+                {/* City Selection */}
                 <div className="mb-5">
-                  <label className="block text-slate-400 text-sm mb-2">Driver ID</label>
-                  <input
-                    type="text"
-                    value={driverId}
-                    onChange={(e) => setDriverId(e.target.value)}
-                    placeholder="DRV-001"
-                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-neon-purple/50 focus:ring-1 focus:ring-neon-purple/25 transition-all text-sm"
+                  <label className="flex items-center gap-2 text-slate-400 text-sm mb-2">
+                    <MapPin size={14} className="text-neon-purple" />
+                    Base City
+                  </label>
+                  <select
+                    value={city}
+                    onChange={(e) => {
+                      const selectedCity = e.target.value;
+                      setCity(selectedCity);
+                      if (CITY_COORDINATES[selectedCity]) {
+                        setLatitude(CITY_COORDINATES[selectedCity].lat);
+                        setLongitude(CITY_COORDINATES[selectedCity].lon);
+                      }
+                    }}
+                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-neon-purple/50 focus:ring-1 focus:ring-neon-purple/25 transition-all text-sm appearance-none"
                     required
-                  />
+                  >
+                    <option value="" className="bg-slate-900">Choose your city...</option>
+                    {Object.keys(CITY_COORDINATES).map((c) => (
+                      <option key={c} value={c} className="bg-slate-900">{c}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* PIN */}
@@ -341,6 +417,36 @@ export default function RegisterPage() {
           </form>
         )}
       </div>
+
+      {/* Driver ID Success Modal */}
+      {assignedDriverId && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="w-full max-w-md p-8 rounded-2xl border border-neon-purple/30 bg-slate-950/90 backdrop-blur-sm text-center animate-fade-in-up">
+            <div className="w-16 h-16 rounded-full bg-neon-purple/10 border border-neon-purple/30 flex items-center justify-center mx-auto mb-5">
+              <Truck size={28} className="text-neon-purple" />
+            </div>
+            <h2 className="text-white text-xl font-bold mb-1">Account Created!</h2>
+            <p className="text-slate-400 text-sm mb-6">Your Driver ID has been auto-assigned. Save it — you'll need it to log in.</p>
+
+            <div className="bg-neon-purple/10 border border-neon-purple/30 rounded-xl p-5 mb-2">
+              <p className="text-slate-400 text-xs uppercase tracking-widest mb-2">Your Driver ID</p>
+              <p className="text-neon-purple font-mono text-3xl font-bold tracking-widest">{assignedDriverId}</p>
+            </div>
+            <p className="text-slate-500 text-xs mb-6">Screenshot or write this down before continuing.</p>
+
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(assignedDriverId);
+                navigate('/login');
+              }}
+              className="w-full py-3.5 rounded-lg font-semibold text-sm bg-neon-purple/20 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/30 transition-all flex items-center justify-center gap-2"
+            >
+              <UserPlus size={16} />
+              Copy ID &amp; Go to Login
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

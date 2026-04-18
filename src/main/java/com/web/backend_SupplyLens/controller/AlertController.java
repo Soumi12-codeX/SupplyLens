@@ -69,7 +69,7 @@ public class AlertController {
             Map<String, Object> rerouteReq = new HashMap<>();
             rerouteReq.put("shipmentId", s.getId());
             rerouteReq.put("blockedNode", alert.getNodeName());
-            rerouteReq.put("destination", s.getRoute().getDestination());
+            rerouteReq.put("destination", s.getRoute().getDestination().getName());
 
             try {
                 // Fix Type Mismatch: Use ParameterizedTypeReference for List of Maps
@@ -92,7 +92,7 @@ public class AlertController {
 
         return ResponseEntity.ok("Alert processed and " + affected.size() + " shipments analyzed.");
     }
-    
+
     private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>> options) {
         for (Map<String, Object> opt : options) {
             RouteOption routeOption = new RouteOption();

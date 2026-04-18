@@ -42,7 +42,7 @@ public class AlertService {
         
         // Step 4: Find Affected Shipments
         if (alert.getNodeName() != null) {
-            List<Shipment> affected = shipmentRepo.findByRouteNodesContaining(alert.getNodeName());
+            List<Shipment> affected = shipmentRepo.findAffectedByNode(alert.getNodeName());
             if (!affected.isEmpty()) {
                 String ids = affected.stream()
                         .map(s -> s.getId().toString())
@@ -76,8 +76,8 @@ public class AlertService {
             requestBody.put("alertId", alert.getId());
             requestBody.put("blockedNode", alert.getNodeName());
             requestBody.put("shipmentId", sample.getId());
-            requestBody.put("source", sample.getRoute() != null ? sample.getRoute().getSource() : "Unknown");
-            requestBody.put("destination", sample.getRoute() != null ? sample.getRoute().getDestination() : "Unknown");
+            requestBody.put("source", sample.getRoute() != null ? sample.getRoute().getSource().getName() : "Unknown");
+            requestBody.put("destination", sample.getRoute() != null ? sample.getRoute().getDestination().getName() : "Unknown");
             
             System.out.println("Calling Python AI for optimization: " + pythonUrl);
             

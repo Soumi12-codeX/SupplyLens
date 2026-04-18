@@ -56,42 +56,81 @@ const TRUCK_ROUTES = [
   { from: 'delhi', to: 'chennai', cargo: 'Machinery' },
 ];
 
-const DRIVER_NAMES = [
-  'Rajesh Kumar', 'Amit Sharma', 'Suresh Patel',
-  'Vikram Singh', 'Deepak Verma', 'Arun Yadav',
-];
+// Simulation driver labels (REMOVED: Hardcoded names)
 
+// Truck IDs used for simulation
 const TRUCK_IDS = ['TRK-001', 'TRK-002', 'TRK-003', 'TRK-004', 'TRK-005', 'TRK-006'];
 
-// Generate the fleet
-export const mockFleet = TRUCK_ROUTES.map((route, i) => {
-  const from = CITIES[route.from];
-  const to = CITIES[route.to];
-  const routePoints = generateRoute(from, to);
-  const progress = Math.random() * 0.7 + 0.1; // 10-80% along route
+export let mockFleet = [];
 
-  return {
-    id: TRUCK_IDS[i],
-    driver: DRIVER_NAMES[i],
-    phone: `+91 98${Math.floor(10000000 + Math.random() * 90000000)}`,
-    origin: from,
-    originName: from.name,
-    destination: to,
-    destinationName: to.name,
-    cargo: route.cargo,
-    route: routePoints,
-    progress: progress,
-    currentPosition: {
-      lat: routePoints[Math.floor(progress * routePoints.length)].lat,
-      lng: routePoints[Math.floor(progress * routePoints.length)].lng,
-    },
-    speed: Math.floor(40 + Math.random() * 40), // 40-80 km/h
-    status: Math.random() > 0.2 ? 'on-route' : 'delayed',
-    eta: `${Math.floor(2 + Math.random() * 12)}h ${Math.floor(Math.random() * 60)}m`,
-    distanceRemaining: `${Math.floor(50 + Math.random() * 800)} km`,
-    departedAt: new Date(Date.now() - Math.floor(Math.random() * 86400000)).toISOString(),
-  };
-});
+export async function fetchAndInitializeFleet() {
+  try {
+    const response = await fetch('/api/route/detailed');
+    const routesData = await response.json();
+    
+    // Only use routes that have at least 2 nodes
+    const validRoutes = routesData.filter(r => r.nodes && r.nodes.length >= 2).slice(0, 10);
+    
+    if (validRoutes.length === 0) {
+      console.warn("No valid detailed routes found from backend, falling back to empty fleet");
+      mockFleet = [];
+      return mockFleet;
+    }
+
+    mockFleet = validRoutes.map((routeData, i) => {
+      // routeData.nodes is the array of TransitNodes
+      const routePoints = routeData.nodes.map(node => ({
+        lat: node.latitude,
+        lng: node.longitude,
+        name: node.name
+      }));
+      
+      const from = routePoints[0];
+      const to = routePoints[routePoints.length - 1];
+      const progress = Math.random() * 0.7 + 0.1; // 10-80% along route
+
+      // To find exact current position across the literal segments:
+      let totalSegs = routePoints.length - 1;
+      let routeProgressIdx = progress * totalSegs;
+      let segIdx = Math.floor(routeProgressIdx);
+      let segProg = routeProgressIdx - segIdx;
+      
+      let currentLat = routePoints[segIdx].lat;
+      let currentLng = routePoints[segIdx].lng;
+      
+      if (segIdx < totalSegs) {
+        currentLat += (routePoints[segIdx+1].lat - routePoints[segIdx].lat) * segProg;
+        currentLng += (routePoints[segIdx+1].lng - routePoints[segIdx].lng) * segProg;
+      }
+
+      return {
+        driver: `Active Driver ${i+1}`,
+        phone: `+91 98-SIM-${i+1}`,
+        origin: from,
+        originName: from.name,
+        destination: to,
+        destinationName: to.name,
+        cargo: routeData.route.riskLevel === 'high' ? 'High Value' : 'Standard Cargo',
+        route: routePoints,
+        progress: progress,
+        currentPosition: {
+          lat: currentLat,
+          lng: currentLng,
+        },
+        speed: Math.floor(40 + Math.random() * 40),
+        status: routeData.route.status === 'blocked' ? 'delayed' : 'on-route',
+        eta: routeData.route.estimatedTime || `${Math.floor(2 + Math.random() * 12)}h`,
+        distanceRemaining: `${Math.floor(50 + Math.random() * Math.max(100, routeData.route.distance))} km`,
+        departedAt: new Date(Date.now() - Math.floor(Math.random() * 86400000)).toISOString(),
+      };
+    });
+
+    return mockFleet;
+  } catch (error) {
+    console.error("Failed to fetch detailed routes from backend:", error);
+    return [];
+  }
+}
 
 // AI alert scenarios
 const ALERT_TYPES = [
@@ -209,13 +248,24 @@ export class MockSimulator {
     this.intervalId = setInterval(() => {
       this.fleet = this.fleet.map((truck) => {
         const newProgress = Math.min(truck.progress + 0.005 + Math.random() * 0.003, 0.99);
-        const pointIndex = Math.floor(newProgress * (truck.route.length - 1));
-        const point = truck.route[pointIndex];
+        
+        let totalSegs = truck.route.length - 1;
+        let routeProgressIdx = newProgress * totalSegs;
+        let segIdx = Math.floor(routeProgressIdx);
+        let segProg = routeProgressIdx - segIdx;
+        
+        let currentLat = truck.route[segIdx].lat;
+        let currentLng = truck.route[segIdx].lng;
+        
+        if (segIdx < totalSegs) {
+          currentLat += (truck.route[segIdx+1].lat - truck.route[segIdx].lat) * segProg;
+          currentLng += (truck.route[segIdx+1].lng - truck.route[segIdx].lng) * segProg;
+        }
 
         return {
           ...truck,
           progress: newProgress,
-          currentPosition: { lat: point.lat, lng: point.lng },
+          currentPosition: { lat: currentLat, lng: currentLng },
           speed: Math.floor(35 + Math.random() * 45),
           distanceRemaining: `${Math.floor((1 - newProgress) * 1000)} km`,
         };
@@ -241,4 +291,4 @@ export class MockSimulator {
   }
 }
 
-export default { mockFleet, generateMockAlert, generateRoadCondition, MockSimulator, WAREHOUSES, DELIVERY_LOCATIONS };
+export default { mockFleet, fetchAndInitializeFleet, generateMockAlert, generateRoadCondition, MockSimulator, WAREHOUSES, DELIVERY_LOCATIONS };

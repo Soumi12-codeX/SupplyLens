@@ -16,6 +16,7 @@ import com.web.backend_SupplyLens.model.Shipment;
 import com.web.backend_SupplyLens.repository.DriverLocationRepository;
 import com.web.backend_SupplyLens.repository.ShipmentRepository;
 import com.web.backend_SupplyLens.service.DriverService;
+import com.web.backend_SupplyLens.service.ShipmentService;
 
 
 @RestController
@@ -30,6 +31,9 @@ public class DriverController {
 
     @Autowired
     private ShipmentRepository shipmentRepo;
+
+    @Autowired
+    private ShipmentService shipmentService;
 
     @GetMapping("/shipments/{driverId}")
     public List<Shipment> getShipmentsForDriver(@PathVariable String driverId){
@@ -62,6 +66,9 @@ public class DriverController {
         locationRepo.findByDriverId(shipment.getAssignedDriverId()).ifPresent(loc -> {
             loc.setAvailable(true);
             locationRepo.save(loc);
+
+            // Driver found! Try assigning them to another pending shipment immediately
+            shipmentService.checkAndAssignPendingShipments();
         });
 
         return ResponseEntity.ok("Shipment delivered, driver is now available");
@@ -73,6 +80,17 @@ public class DriverController {
         Shipment shipment = shipmentRepo.findById(shipmentId).orElseThrow();
         shipment.setAssignmentStatus("IN_PROGRESS");
         shipmentRepo.save(shipment);
+
+        // mark driver unavailable when they start the trip and snap position to warehouse
+        locationRepo.findByDriverId(shipment.getAssignedDriverId()).ifPresent(loc -> {
+            if (shipment.getWarehouse() != null) {
+                loc.setLatitude(shipment.getWarehouse().getLatitude());
+                loc.setLongitude(shipment.getWarehouse().getLongitude());
+            }
+            loc.setAvailable(false);
+            locationRepo.save(loc);
+        });
+
         return ResponseEntity.ok("Trip started! Drive safe.");
     }
 }

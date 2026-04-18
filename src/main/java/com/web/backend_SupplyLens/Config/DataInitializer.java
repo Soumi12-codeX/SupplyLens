@@ -1,4 +1,4 @@
-package com.web.backend_SupplyLens.config;
+package com.web.backend_SupplyLens.Config;
 
 import com.web.backend_SupplyLens.model.DriverLocation;
 import com.web.backend_SupplyLens.model.User;
