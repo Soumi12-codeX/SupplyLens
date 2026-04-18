@@ -17,6 +17,7 @@ public class Warehouse {
     private String city;
     private double latitude;
     private double longitude;
+    private Long adminUserId;
 
     public Long getId() {
         return id;
@@ -47,5 +48,11 @@ public class Warehouse {
     }
     public void setLongitude(double longitude) {
         this.longitude = longitude;
+    }
+    public Long getAdminUserId(){
+        return adminUserId;
+    }
+    public void setAdminUserId(Long adminUserId){
+        this.adminUserId = adminUserId;
     }
 }

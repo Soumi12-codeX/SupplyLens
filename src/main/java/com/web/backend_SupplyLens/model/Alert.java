@@ -29,6 +29,7 @@ public class Alert {
     private String nodeName;
     private String messsage;
     private int severity;
+    private Long adminId;
    
     @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
     private LocalDateTime time;
@@ -96,5 +97,11 @@ public class Alert {
     }
     public void setStatus(AlertStatus status) {
         this.status = status;
+    }
+    public Long getAdminId(){
+        return adminId;
+    }
+    public void setAdminId(Long adminId){
+        this.adminId = adminId;
     }
 }

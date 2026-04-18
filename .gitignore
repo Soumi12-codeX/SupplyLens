@@ -58,6 +58,7 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+.env
 
 ### OS ###
 .DS_Store
@@ -76,3 +77,4 @@ populate_proximity_data.sql
 repopulate_routes.sql
 seed_hubs.sql
 seed_nodes.sql
+supply_chain_db_backup.sql
