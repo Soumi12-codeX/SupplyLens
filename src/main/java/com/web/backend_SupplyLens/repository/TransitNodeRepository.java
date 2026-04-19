@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface TransitNodeRepository extends JpaRepository<TransitNode, Long> {
     Optional<TransitNode> findByName(String name);
+    Optional<TransitNode> findByNameIgnoreCase(String name);
+    boolean existsByNameIgnoreCase(String name);
 }

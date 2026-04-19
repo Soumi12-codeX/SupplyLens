@@ -25,8 +25,6 @@ public class Transport {
     @JoinColumn(name = "driver_id")
     private User driver;
 
-    private String status; //idle, in_transit, rerouted
-
     private String currentLocation;
 
     private String currentRouteId;    
@@ -51,12 +49,6 @@ public class Transport {
     }
     public void setDriver(User driver) {
         this.driver = driver;
-    }
-    public String getStatus() {
-        return status;
-    }
-    public void setStatus(String status) {
-        this.status = status;
     }
     public String getCurrentLocation() {
         return currentLocation;

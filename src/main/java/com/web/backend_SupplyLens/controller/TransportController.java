@@ -103,7 +103,6 @@ public class TransportController {
         transport.setCurrentRouteId(String.valueOf(routeOptionId));
         transport.setCurrentLocation(option.getPath());
         transport.setTransportStatus("REROUTED");
-        transport.setStatus("IN_TRANSIT");
         transportRepo.save(transport);
 
         return ResponseEntity.ok("Route assigned to transport " + transportId);

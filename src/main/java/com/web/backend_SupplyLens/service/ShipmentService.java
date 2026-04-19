@@ -45,7 +45,8 @@ public class ShipmentService {
     }
 
     /**
-     * MERGED METHOD: Handles Warehouse linking, AI Scanning, and Auto-Driver Assignment.
+     * MERGED METHOD: Handles Warehouse linking, AI Scanning, and Auto-Driver
+     * Assignment.
      */
     @Transactional
     public Shipment creatAndAssign(Shipment shipment, Long warehouseId) {
@@ -66,9 +67,9 @@ public class ShipmentService {
             finalRoute = routeRepo.findById(shipment.getRoute().getId())
                     .orElseThrow(() -> new RuntimeException("Route not found"));
             shipment.setRoute(finalRoute);
-            
+
             // Mirror nodes to shipment table (Requirement for your logic)
-            shipment.setRouteNodes(finalRoute.getRouteNodes()); 
+            shipment.setRouteNodes(finalRoute.getPath());
         }
 
         // 4. Run your Friend's Auto-Assignment Logic
@@ -78,7 +79,7 @@ public class ShipmentService {
         Shipment savedShipment = shipmentRepo.save(shipment);
 
         // 6. TRIGGER PYTHON AI SCAN (Requirement for your logic)
-        // Note: Using warehouse.getAdminId() based on your previous requirement. 
+        // Note: Using warehouse.getAdminId() based on your previous requirement.
         // If your friend renamed it, change this to getAdminUserId().
         if (finalRoute != null && warehouse.getAdminUserId() != null) {
             triggerPythonScan(savedShipment, warehouse.getAdminUserId());
@@ -92,23 +93,21 @@ public class ShipmentService {
             Map<String, Object> pythonReq = new HashMap<>();
             pythonReq.put("shipmentId", savedShipment.getId());
             pythonReq.put("adminId", adminId);
-            
+
             List<String> nodesList = Arrays.asList(savedShipment.getRouteNodes().split(", "));
             pythonReq.put("nodes", nodesList);
 
             restTemplate.postForEntity("http://localhost:5000/ai/scan-nodes", pythonReq, String.class);
-            System.out.println(">>> AI: Triggered Scan for Shipment: " + savedShipment.getId() + " (Admin: " + adminId + ")");
+            System.out.println(
+                    ">>> AI: Triggered Scan for Shipment: " + savedShipment.getId() + " (Admin: " + adminId + ")");
         } catch (Exception e) {
             System.err.println(">>> AI ERROR: Scan failed: " + e.getMessage());
         }
     }
 
-    /**
-     * Friend's Logic: Attempts to find and assign the best available driver.
-     */
     public void tryAssignDriver(Shipment shipment, Warehouse warehouse) {
         String nearestDriverId = findNearestDriver(warehouse.getLatitude(), warehouse.getLongitude());
-        
+
         if (nearestDriverId != null) {
             shipment.setAssignedDriverId(nearestDriverId);
             shipment.setAssignmentStatus("ASSIGNED");
@@ -117,12 +116,19 @@ public class ShipmentService {
             if (shipment.getTransport() == null || shipment.getTransport().getId() == null) {
                 userRepo.findByDriverId(nearestDriverId).ifPresent(user -> {
                     transportRepo.findByDriver(user).ifPresentOrElse(
-                        shipment::setTransport,
-                        () -> transportRepo.findAll().stream()
-                                .filter(t -> "AVAILABLE".equalsIgnoreCase(t.getStatus()))
-                                .findFirst()
-                                .ifPresent(shipment::setTransport)
-                    );
+                            t -> {
+                                t.setTransportStatus("IN_TRANSIT"); // ← branch 1
+                                transportRepo.save(t);
+                                shipment.setTransport(t);
+                            },
+                            () -> transportRepo.findAll().stream()
+                                    .filter(t -> "AVAILABLE".equalsIgnoreCase(t.getTransportStatus()))
+                                    .findFirst()
+                                    .ifPresent(t -> {
+                                        t.setTransportStatus("IN_TRANSIT"); // ← branch 2
+                                        transportRepo.save(t);
+                                        shipment.setTransport(t);
+                                    }));
                 });
             }
 
@@ -136,7 +142,8 @@ public class ShipmentService {
 
     private String findNearestDriver(double warehouseLat, double warehouseLong) {
         List<DriverLocation> availableDrivers = locationRepo.findByAvailableTrue();
-        if(availableDrivers.isEmpty()) return null;
+        if (availableDrivers.isEmpty())
+            return null;
 
         DriverLocation bestDriver = null;
         double minDistance = Double.MAX_VALUE;
@@ -153,13 +160,14 @@ public class ShipmentService {
     }
 
     private double haversineDistance(double lat1, double lng1, double lat2, double lng2) {
-        if (lat1 == lat2 && lng1 == lng2) return 0.0;
+        if (lat1 == lat2 && lng1 == lng2)
+            return 0.0;
         final int R = 6371;
         double dLat = Math.toRadians(lat2 - lat1);
         double dLng = Math.toRadians(lng2 - lng1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) 
-                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) 
-                 * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                        * Math.sin(dLng / 2) * Math.sin(dLng / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
@@ -174,7 +182,8 @@ public class ShipmentService {
 
         for (Shipment shipment : unassigned) {
             Warehouse wh = shipment.getWarehouse();
-            if (wh == null) continue;
+            if (wh == null)
+                continue;
             tryAssignDriver(shipment, wh);
             if ("ASSIGNED".equals(shipment.getAssignmentStatus())) {
                 shipmentRepo.save(shipment);

@@ -12,13 +12,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import com.web.backend_SupplyLens.model.TransitNode;
-import com.web.backend_SupplyLens.repository.TransitRepository;
+import com.web.backend_SupplyLens.repository.TransitNodeRepository;
 
 @Service
 public class CoordinateService {
 
     @Autowired
-    private TransitRepository transitRepo;
+    private TransitNodeRepository transitRepo;
 
     /**
      * Main entry point: Checks DB first, then fetches from external API if missing.
