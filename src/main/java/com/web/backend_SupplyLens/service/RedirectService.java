@@ -17,7 +17,7 @@ import com.web.backend_SupplyLens.repository.WarehouseRepository;
 
 @Service
 public class RedirectService {
-    
+
     @Autowired
     private RouteOptionRepo routeOptionRepo;
 
@@ -30,46 +30,62 @@ public class RedirectService {
     @Autowired
     private RouteRepository routeRepo;
 
-    public String generateDefaultRouteLink(Long routeId){
-        Route route = routeRepo.findById(routeId).orElseThrow(()-> new RuntimeException("Route not found"));
+    public String generateDefaultRouteLink(Long routeId) {
+        Route route = routeRepo.findById(routeId)
+                .orElseThrow(() -> new RuntimeException("Route not found"));
 
-        List<String> cityNames = Arrays.asList(route.getRouteNodes().split(",\\s*"));
+        String nodeSource = route.getPath();
+        String delimiter = nodeSource.contains("->") ? "\\s*->\\s*" : ",\\s*";
+        List<String> cityNames = Arrays.asList(nodeSource.split(delimiter));
 
-        List<TransitNode> nodes = cityNames.stream().map(city-> coordinateService.getCoordinates(city))
-        .collect(Collectors.toList());
+        List<TransitNode> nodes = cityNames.stream()
+                .map(city -> {
+                    // 1. Slice out anything after a parenthesis (e.g., "Jaipur (Direct)" ->
+                    // "Jaipur")
+                    // 2. Trim whitespace
+                    String cleanCity = city.split("\\(")[0].trim();
 
+                    TransitNode n = coordinateService.getCoordinates(cleanCity);
+                    if (n == null) {
+                        throw new RuntimeException("Coordinate not found for: " + cleanCity);
+                    }
+                    return n;
+                })
+                .collect(Collectors.toList());
+
+        // ... rest of the origin/destination/waypoints logic remains the same ...
+
+        // Ensure you are using the correct Google Maps URL format we discussed:
         String origin = nodes.get(0).getLatitude() + "," + nodes.get(0).getLongitude();
-        String destination = nodes.get(nodes.size() - 1).getLatitude() + "," + nodes.get(nodes.size()-1).getLongitude();
-
-        String waypoints = nodes.subList(1, nodes.size()-1).stream().map(n->n.getLatitude()+","+n.getLongitude()).collect(Collectors.joining("|"));
+        String destination = nodes.get(nodes.size() - 1).getLatitude() + ","
+                + nodes.get(nodes.size() - 1).getLongitude();
 
         StringBuilder url = new StringBuilder("https://www.google.com/maps/dir/?api=1");
         url.append("&origin=").append(origin);
         url.append("&destination=").append(destination);
-        if(!waypoints.isEmpty()){
-            url.append("&waypoints=").append(waypoints);
-        }
         url.append("&travelmode=driving");
+
         return url.toString();
     }
 
-    public String generateRedirectLinkFromOption(Long routeOptionId, Long sourceWhId, Long destWhId){
-        //fetch saved routeOption
-        RouteOption option = routeOptionRepo.findById(routeOptionId).orElseThrow(()-> new RuntimeException("Route Option not found"));
+    public String generateRedirectLinkFromOption(Long routeOptionId, Long sourceWhId, Long destWhId) {
+        // fetch saved routeOption
+        RouteOption option = routeOptionRepo.findById(routeOptionId)
+                .orElseThrow(() -> new RuntimeException("Route Option not found"));
 
         List<String> cityNames = Arrays.asList(option.getPath().split(" -> "));
 
         return generateGoogleMapsLink(sourceWhId, destWhId, cityNames);
     }
 
-    public String generateGoogleMapsLink(Long sourceWhId, Long destWhId, List<String> transitCities){
+    public String generateGoogleMapsLink(Long sourceWhId, Long destWhId, List<String> transitCities) {
         Warehouse source = warehouseRepo.findById(sourceWhId).orElseThrow();
         Warehouse dest = warehouseRepo.findById(destWhId).orElseThrow();
 
         String origin = source.getLatitude() + "," + source.getLongitude();
         String destination = dest.getLatitude() + "," + dest.getLongitude();
 
-        String waypoints = transitCities.stream().map(city ->{
+        String waypoints = transitCities.stream().map(city -> {
             TransitNode node = coordinateService.getCoordinates(city);
             return node.getLatitude() + "," + node.getLongitude();
         }).collect(Collectors.joining("|"));
@@ -78,7 +94,7 @@ public class RedirectService {
         url.append("&origin=").append(origin);
         url.append("&destination=").append(destination);
 
-        if(!waypoints.isEmpty()){
+        if (!waypoints.isEmpty()) {
             url.append("&waypoints=").append(waypoints);
         }
         url.append("&travelmode=driving");
