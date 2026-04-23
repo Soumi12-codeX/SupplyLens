@@ -21,6 +21,14 @@ genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 news_client = NewsApiClient(api_key=NEWS_API_KEY)
 
+# In your Flask app.py
+@app.route('/ai/scan-nodes', methods=['POST'])  # Check for spelling/slashes
+def scan_nodes():
+    data = request.json
+    nodes = data.get('nodes', [])
+    # ... rest of your scanning logic
+    return jsonify({"status": "Scan initiated", "nodes": nodes}), 200
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     return math.sqrt((lat1 - lat2)**2 + (lon1 - lon2)**2)
 

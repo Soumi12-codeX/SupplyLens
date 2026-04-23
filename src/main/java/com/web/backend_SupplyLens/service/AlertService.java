@@ -2,6 +2,7 @@ package com.web.backend_SupplyLens.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -12,6 +13,7 @@ import com.web.backend_SupplyLens.model.AlertStatus;
 import com.web.backend_SupplyLens.model.RouteOption;
 import com.web.backend_SupplyLens.model.RouteOptionStatus;
 import com.web.backend_SupplyLens.model.Shipment;
+import com.web.backend_SupplyLens.model.Warehouse;
 import com.web.backend_SupplyLens.repository.AlertRepository;
 import com.web.backend_SupplyLens.repository.RouteOptionRepo;
 import com.web.backend_SupplyLens.repository.ShipmentRepository;
@@ -39,23 +41,29 @@ public class AlertService {
     @Autowired
     private RestTemplate restTemplate;
 
+
     @Transactional
     public Alert saveAlert(Alert alert) {
         alert.setStatus(AlertStatus.PENDING);
         alert.setTime(LocalDateTime.now());
 
-        // Step 4: Find Affected Shipments
         if (alert.getNodeName() != null) {
             List<Shipment> affected = shipmentRepo.findAffectedByNode(alert.getNodeName());
             if (!affected.isEmpty()) {
+                // Logic: Take the first affected shipment, find its warehouse,
+                // and assign the alert to that warehouse's admin.
+                Shipment firstShipment = affected.get(0);
+                Warehouse wh = firstShipment.getWarehouse();
+
+                if (wh.getAdminUserId() != null) {
+                    alert.setAdminId(wh.getAdminUserId()); // Automatically link to the Warehouse Admin
+                }
+
                 String ids = affected.stream()
                         .map(s -> s.getId().toString())
-                        .reduce((a, b) -> a + "," + b)
-                        .orElse("");
+                        .collect(Collectors.joining(","));
                 alert.setAffectedShipmentIds(ids);
 
-                // Step 5: For each affected shipment, request optimization from Python
-                // For simplicity, we trigger it for the first one or a general request
                 triggerOptimization(alert, affected);
             }
         }
@@ -176,6 +184,7 @@ public class AlertService {
             shipmentRepo.findById(shipmentId).ifPresent(shipment -> {
                 shipment.setCurrentPath(selected.getPath());
                 shipment.setRouteStatus("REROUTED");
+                shipment.setActiveRouteOptionId(selectedRouteId);
                 shipmentRepo.save(shipment);
             });
         }

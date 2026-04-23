@@ -78,6 +78,8 @@ public class RedirectService {
         return generateGoogleMapsLink(sourceWhId, destWhId, cityNames);
     }
 
+    // Inside RedirectService.java
+
     public String generateGoogleMapsLink(Long sourceWhId, Long destWhId, List<String> transitCities) {
         Warehouse source = warehouseRepo.findById(sourceWhId).orElseThrow();
         Warehouse dest = warehouseRepo.findById(destWhId).orElseThrow();
@@ -85,11 +87,16 @@ public class RedirectService {
         String origin = source.getLatitude() + "," + source.getLongitude();
         String destination = dest.getLatitude() + "," + dest.getLongitude();
 
-        String waypoints = transitCities.stream().map(city -> {
-            TransitNode node = coordinateService.getCoordinates(city);
-            return node.getLatitude() + "," + node.getLongitude();
-        }).collect(Collectors.joining("|"));
+        // Collect coordinates for waypoints
+        String waypoints = transitCities.stream()
+                .map(city -> {
+                    TransitNode node = coordinateService.getCoordinates(city.trim());
+                    return (node != null) ? node.getLatitude() + "," + node.getLongitude() : "";
+                })
+                .filter(coords -> !coords.isEmpty())
+                .collect(Collectors.joining("|"));
 
+        // OFFICIAL GOOGLE MAPS DIRECTIONS FORMAT
         StringBuilder url = new StringBuilder("https://www.google.com/maps/dir/?api=1");
         url.append("&origin=").append(origin);
         url.append("&destination=").append(destination);
@@ -98,6 +105,7 @@ public class RedirectService {
             url.append("&waypoints=").append(waypoints);
         }
         url.append("&travelmode=driving");
+
         return url.toString();
     }
 }

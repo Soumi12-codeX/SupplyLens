@@ -27,6 +27,8 @@ public class Shipment {
 
     private String routeStatus; //normal, rerouted
 
+    private Long activeRouteOptionId; //ai route
+
     @Column(columnDefinition = "TEXT")
     private String currentPath; //set when admin selects a route
 
@@ -112,5 +114,10 @@ public class Shipment {
     public void setWarehouse(Warehouse warehouse) {
         this.warehouse = warehouse;
     }
-    
+    public Long getActiveRouteOptionId(){
+        return activeRouteOptionId;
+    }
+    public void setActiveRouteOptionId(Long activeRouteOptionId){
+        this.activeRouteOptionId = activeRouteOptionId;
+    }
 }

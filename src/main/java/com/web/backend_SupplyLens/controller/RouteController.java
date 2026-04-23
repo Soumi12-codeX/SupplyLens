@@ -8,9 +8,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.web.backend_SupplyLens.model.Route;
+import com.web.backend_SupplyLens.model.Shipment;
 import com.web.backend_SupplyLens.model.TransitNode;
 import com.web.backend_SupplyLens.dto.RouteDTO;
 import com.web.backend_SupplyLens.repository.RouteRepository;
+import com.web.backend_SupplyLens.repository.ShipmentRepository;
 import com.web.backend_SupplyLens.service.RedirectService;
 import com.web.backend_SupplyLens.repository.TransitNodeRepository;
 
@@ -27,6 +29,9 @@ public class RouteController {
 
     @Autowired
     private TransitNodeRepository transitNodeRepo;
+
+    @Autowired
+    private ShipmentRepository shipmentRepo;
 
     @PostMapping("/create")
     public ResponseEntity<Route> createRoute(@RequestBody Route route) {
@@ -122,5 +127,45 @@ public class RouteController {
         List<TransitNode> nodes = transitNodeRepo.findAll();
         System.out.println(">>> AI: Fetching all " + nodes.size() + " transit nodes for Python Map.");
         return ResponseEntity.ok(nodes);
+    }
+
+    // Inside RouteController.java
+
+    @GetMapping("/reroute-link")
+    public ResponseEntity<Map<String, String>> getRerouteLink(
+            @RequestParam Long optionId,
+            @RequestParam Long sourceWhId,
+            @RequestParam Long destWhId) {
+
+        String link = redirectService.generateRedirectLinkFromOption(optionId, sourceWhId, destWhId);
+        Map<String, String> response = new HashMap<>();
+        response.put("rerouteLink", link);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/driver-link/{shipmentId}")
+    public ResponseEntity<Map<String, String>> getDriverRouteLink(@PathVariable Long shipmentId) {
+        Shipment shipment = shipmentRepo.findById(shipmentId)
+                .orElseThrow(() -> new RuntimeException("Shipment not found"));
+
+        Map<String, String> response = new HashMap<>();
+
+        if ("REROUTED".equals(shipment.getRouteStatus()) && shipment.getActiveRouteOptionId() != null) {
+            // Generate the AI Link
+            String aiLink = redirectService.generateRedirectLinkFromOption(
+                    shipment.getActiveRouteOptionId(),
+                    shipment.getWarehouse().getId(),
+                    shipment.getRoute().getDestination().getId());
+            response.put("type", "AI_REROUTE");
+            response.put("link", aiLink);
+        } else {
+            // Generate the Standard Link
+            String defaultLink = redirectService.generateDefaultRouteLink(shipment.getRoute().getId());
+            response.put("type", "DEFAULT");
+            response.put("link", defaultLink);
+        }
+
+        return ResponseEntity.ok(response);
     }
 }
