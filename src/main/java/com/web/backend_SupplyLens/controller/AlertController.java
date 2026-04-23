@@ -56,57 +56,13 @@ public class AlertController {
 
     @PostMapping("/from-python")
     public ResponseEntity<?> receiveAlert(@RequestBody Alert alert) {
-        alert.setTime(LocalDateTime.now());
-        Alert savedAlert = alertRepo.save(alert);
-
-        // Find all shipments passing through the affected node
-        List<Shipment> affected = shipmentRepo.findAffectedByNode(alert.getNodeName());
-
-        Set<Long> notifiedAdmins = new HashSet<>();
-
-        for (Shipment s : affected) {
-            // FIX: Using your standardized variable name 'adminUserId'
-            Long adminId = s.getWarehouse().getAdminUserId();
-
-            if (adminId != null && !notifiedAdmins.contains(adminId)) {
-                messagingTemplate.convertAndSendToUser(
-                        adminId.toString(),
-                        "/topic/alerts",
-                        savedAlert);
-                notifiedAdmins.add(adminId);
-            }
-
-            // Prepare request for Python AI Rerouting
-            Map<String, Object> rerouteReq = new HashMap<>();
-            rerouteReq.put("shipmentId", s.getId());
-            rerouteReq.put("blockedNode", alert.getNodeName());
-            
-            // Safety check for route destination
-            if (s.getRoute() != null) {
-                rerouteReq.put("destination", s.getRoute().getDestination());
-            }
-
-            try {
-                // Call Python AI for rerouting options
-                ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                        "http://localhost:5000/ai/optimize-route",
-                        HttpMethod.POST,
-                        new HttpEntity<>(rerouteReq),
-                        new ParameterizedTypeReference<List<Map<String, Object>>>() {});
-
-                List<Map<String, Object>> options = response.getBody();
-                if (options != null) {
-                    saveOptionsToDatabase(savedAlert, options);
-                }
-            } catch (Exception e) {
-                System.err.println(">>> AI ERROR: Reroute failed for Shipment " + s.getId() + ": " + e.getMessage());
-            }
-        }
-
-        return ResponseEntity.ok("Alert processed. Notified " + notifiedAdmins.size() + " admins.");
+        // Just pass the alert to the service. Let the service handle the DB,
+        // notifications, and Python AI calls.
+        Alert savedAlert = alertService.saveAlert(alert);
+        return ResponseEntity.ok("Alert processed and optimization triggered.");
     }
 
-    private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>> options) {
+    /*private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>> options) {
         for (Map<String, Object> opt : options) {
             RouteOption routeOption = new RouteOption();
             routeOption.setAlert(alert);
@@ -124,10 +80,10 @@ public class AlertController {
 
             routeOption.setRiskLevel((String) opt.get("riskLevel"));
             routeOption.setTradeoff((String) opt.get("tradeoff"));
-            
+
             routeOptionRepo.save(routeOption);
         }
-    }
+    }*/
 
     @GetMapping("/all")
     public List<Alert> getAllAlerts() {
@@ -146,7 +102,7 @@ public class AlertController {
             @PathVariable Long routeOptionId,
             @RequestParam Long sourceWhId,
             @RequestParam Long destWhId) {
-        
+
         alertService.selectRoute(alertId, routeOptionId);
         String googleMapsLink = redirectService.generateRedirectLinkFromOption(routeOptionId, sourceWhId, destWhId);
 

@@ -43,7 +43,7 @@ public class RouteController {
     }
 
     /**
-     * Fetches routes and converts the city names into actual TransitNode objects 
+     * Fetches routes and converts the city names into actual TransitNode objects
      * (with Lat/Lng) for the Leaflet map.
      */
     @GetMapping("/detailed")
@@ -51,10 +51,10 @@ public class RouteController {
         List<Route> routes = routeRepo.findAll();
         return routes.stream().map(route -> {
             List<TransitNode> nodes = new ArrayList<>();
-            
+
             // Priority: Use routeNodes first as it's cleaner for splitting
             String nodeSource = route.getRouteNodes() != null ? route.getRouteNodes() : route.getPath();
-            
+
             if (nodeSource != null && !nodeSource.isEmpty()) {
                 // Regex handles both "City, City" and "City -> City"
                 String[] cityNames = nodeSource.split(",\\s*|\\s*->\\s*");
@@ -97,16 +97,17 @@ public class RouteController {
         List<Route> routes = routeRepo.findAll();
         return routes.stream().flatMap(route -> {
             String nodeSource = route.getRouteNodes() != null ? route.getRouteNodes() : route.getPath();
-            if (nodeSource == null) return java.util.stream.Stream.empty();
+            if (nodeSource == null)
+                return java.util.stream.Stream.empty();
 
             String[] nodes = nodeSource.split(",\\s*|\\s*->\\s*");
             List<Map<String, String>> segments = new ArrayList<>();
-            
+
             for (int i = 0; i < nodes.length - 1; i++) {
                 Map<String, String> edge = new HashMap<>();
                 edge.put("u", nodes[i].trim());
                 edge.put("v", nodes[i + 1].trim());
-                
+
                 // Calculate average distance per segment if total distance is known
                 double segmentDist = (route.getDistance() > 0) ? route.getDistance() / (nodes.length - 1) : 0;
                 edge.put("distance", String.format("%.2f", segmentDist));
@@ -114,5 +115,12 @@ public class RouteController {
             }
             return segments.stream();
         }).distinct().collect(Collectors.toList());
+    }
+
+    @GetMapping("/all-nodes")
+    public ResponseEntity<List<TransitNode>> getAllTransitNodes() {
+        List<TransitNode> nodes = transitNodeRepo.findAll();
+        System.out.println(">>> AI: Fetching all " + nodes.size() + " transit nodes for Python Map.");
+        return ResponseEntity.ok(nodes);
     }
 }

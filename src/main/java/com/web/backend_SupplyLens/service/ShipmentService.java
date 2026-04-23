@@ -88,22 +88,33 @@ public class ShipmentService {
         return savedShipment;
     }
 
-    private void triggerPythonScan(Shipment savedShipment, Long adminId) {
-        try {
-            Map<String, Object> pythonReq = new HashMap<>();
-            pythonReq.put("shipmentId", savedShipment.getId());
-            pythonReq.put("adminId", adminId);
+    public void triggerPythonScan(Shipment savedShipment, Long adminId) {
+    try {
+        Map<String, Object> pythonReq = new HashMap<>();
+        pythonReq.put("shipmentId", savedShipment.getId());
+        pythonReq.put("adminId", adminId);
 
-            List<String> nodesList = Arrays.asList(savedShipment.getRouteNodes().split(", "));
-            pythonReq.put("nodes", nodesList);
-
-            restTemplate.postForEntity("http://localhost:5000/ai/scan-nodes", pythonReq, String.class);
-            System.out.println(
-                    ">>> AI: Triggered Scan for Shipment: " + savedShipment.getId() + " (Admin: " + adminId + ")");
-        } catch (Exception e) {
-            System.err.println(">>> AI ERROR: Scan failed: " + e.getMessage());
+        // --- ADDED LOGIC START ---
+        String path = savedShipment.getRouteNodes();
+        if (path == null || path.isEmpty()) {
+            System.err.println(">>> AI ERROR: No route nodes found for shipment " + savedShipment.getId());
+            return;
         }
+
+        // Handles "City A -> City B" or "City A, City B"
+        String delimiter = path.contains("->") ? "\\s*->\\s*" : ",\\s*";
+        List<String> nodesList = Arrays.asList(path.split(delimiter));
+        // --- ADDED LOGIC END ---
+
+        pythonReq.put("nodes", nodesList);
+
+        restTemplate.postForEntity("http://localhost:5000/ai/scan-nodes", pythonReq, String.class);
+        System.out.println(
+                ">>> AI: Triggered Scan for Shipment: " + savedShipment.getId() + " (Admin: " + adminId + ")");
+    } catch (Exception e) {
+        System.err.println(">>> AI ERROR: Scan failed: " + e.getMessage());
     }
+}
 
     public void tryAssignDriver(Shipment shipment, Warehouse warehouse) {
         String nearestDriverId = findNearestDriver(warehouse.getLatitude(), warehouse.getLongitude());

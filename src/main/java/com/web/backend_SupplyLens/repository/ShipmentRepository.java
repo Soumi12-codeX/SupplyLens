@@ -26,6 +26,6 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     @Query("SELECT s FROM Shipment s WHERE s.assignmentStatus = 'UNASSIGNED' OR (s.assignmentStatus = 'ASSIGNED' AND s.assignedDriverId IS NULL)")
     List<Shipment> findPendingAssignments();
 
-    @Query("SELECT s FROM Shipment s WHERE s.route.path LIKE %:nodeName%")
-    List<Shipment> findAffectedByNode(@Param("nodeName") String nodeName);
+    @Query("SELECT s FROM Shipment s JOIN s.route r WHERE LOWER(r.path) LIKE LOWER(CONCAT('%', :nodeName, '%'))")
+List<Shipment> findAffectedByNode(@Param("nodeName") String nodeName);
 }
