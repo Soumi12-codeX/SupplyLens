@@ -28,9 +28,21 @@ public class CoordinateService {
             return null;
         }
 
-        // 1. Search DB (Case-Insensitive)
-        return transitRepo.findByNameIgnoreCase(cityName.trim())
-                .orElseGet(() -> fetchFromNominatim(cityName.trim()));
+        String cleaned = cityName.trim();
+        // 1. Search DB (Case-Insensitive) with exact name
+        java.util.Optional<TransitNode> node = transitRepo.findFirstByNameIgnoreCase(cleaned);
+        
+        if (node.isPresent()) return node.get();
+
+        // 2. Try cleaning common suffixes if not found
+        String simpleName = cleaned.replaceAll("(?i)\\s+(Logistics Hub|Hub|Warehouse|Supply Center|Distribution Center|Regional Hub|Port|Tech|Trade Hub)", "").trim();
+        if (!simpleName.equals(cleaned)) {
+            node = transitRepo.findFirstByNameIgnoreCase(simpleName);
+            if (node.isPresent()) return node.get();
+        }
+
+        // 3. Fallback to Nominatim
+        return fetchFromNominatim(cleaned);
     }
 
     /**

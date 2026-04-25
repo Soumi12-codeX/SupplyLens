@@ -9,6 +9,7 @@ import LiveMapPage from './pages/admin/LiveMapPage';
 import FleetPage from './pages/admin/FleetPage';
 import CreateShipment from './pages/admin/CreateShipment';
 import ManageDrivers from './pages/admin/ManageDrivers';
+import AlertsPage from './pages/admin/AlertsPage';
 import DriverDashboard from './pages/driver/DriverDashboard';
 import DriverNavigation from './pages/driver/DriverNavigation';
 import DriverMessagesPage from './pages/driver/DriverMessagesPage';
@@ -25,7 +26,7 @@ function App() {
       <Route path="/admin/fleet" element={<FleetPage />} />
       <Route path="/admin/shipment" element={<CreateShipment />} />
       <Route path="/admin/drivers" element={<ManageDrivers />} />
-      <Route path="/admin/alerts" element={<ComingSoonPage />} />
+      <Route path="/admin/alerts" element={<AlertsPage />} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/navigation" element={<DriverNavigation />} />
       <Route path="/driver/messages" element={<DriverMessagesPage />} />

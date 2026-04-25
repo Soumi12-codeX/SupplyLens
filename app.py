@@ -11,6 +11,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
+import logging
+logging.basicConfig(filename='ai_debug.log', level=logging.INFO, 
+                    format='%(asctime)s %(levelname)s: %(message)s')
+
 # --- CONFIGURATION ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
@@ -58,15 +62,20 @@ def optimize():
             # Note: Ensure Java returns 'latitude' and 'longitude' keys
             G.add_node(name, pos=(node['latitude'], node['longitude']))
             
-        # NOMINATIM FALLBACK
+        # USE COORDINATES FROM JAVA IF PROVIDED
+        if data.get('sourceLat') and src not in G:
+            G.add_node(src, pos=(data['sourceLat'], data['sourceLng']))
+        if data.get('destLat') and dest not in G:
+            G.add_node(dest, pos=(data['destLat'], data['destLng']))
+
+        # NOMINATIM FALLBACK (only if still missing)
         for city in [src, dest]:
             if city not in G:
                 lat, lon = get_coords_nominatim(city)
                 if lat:
                     G.add_node(city, pos=(lat, lon))
-                    print(f">>> AI: Found missing node {city} via Nominatim")
 
-        # --- CRITICAL: DYNAMIC EDGE BUILDING (The "Spider Web") ---
+        # --- CRITICAL: DYNAMIC EDGE BUILDING ---
         node_list = list(G.nodes(data=True))
         for i in range(len(node_list)):
             for j in range(i + 1, len(node_list)):
@@ -75,8 +84,8 @@ def optimize():
                 dist = calculate_distance(u_data['pos'][0], u_data['pos'][1], 
                                           v_data['pos'][0], v_data['pos'][1])
                 
-                # Threshold for connection (e.g., 6.0 units roughly covers HYD to Chennai)
-                if dist < 6.5: 
+                # Increased threshold to 10.0 for better connectivity
+                if dist < 10.0: 
                     G.add_edge(u_name, v_name, weight=dist)
 
     except Exception as e:
@@ -88,7 +97,9 @@ def optimize():
         print(f">>> AI ACTION: Removed {blocked} from potential paths.")
 
     try:
+        logging.info(f"Finding path from {src} to {dest} avoiding {blocked}")
         path = nx.shortest_path(G, source=src, target=dest, weight='weight')
+        logging.info(f"Path found: {path}")
         
         # Return DICTIONARY with 'routeOptions' key to match AlertService
         return jsonify({
@@ -102,7 +113,7 @@ def optimize():
         })
         
     except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-        print(f">>> ROUTE ERROR: No path from {src} to {dest} avoiding {blocked}")
+        logging.error(f"Path error: {e}")
         return jsonify({"routeOptions": []}), 200
 
 if __name__ == '__main__':

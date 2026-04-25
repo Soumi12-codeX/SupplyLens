@@ -25,7 +25,7 @@ export default function FleetPage() {
         const res = await api.get(url);
         console.log('[FleetPage] Received shipments:', res.data.length);
         // Map backend Shipment to UI format
-        const mapped = res.data.map(s => {
+        const mapped = await Promise.all(res.data.map(async (s) => {
           const isUnassigned = s.assignmentStatus === "UNASSIGNED";
           const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
           
@@ -33,6 +33,48 @@ export default function FleetPage() {
           if (s.assignmentStatus === "DELIVERED") status = "delivered";
           else if (isStarted) status = "on-route";
           else if (isUnassigned) status = "awaiting-dispatch";
+
+          // Dynamic progress: compare driver position vs route endpoints
+          let progress = 0;
+          if (s.assignmentStatus === "DELIVERED") {
+            progress = 1;
+          } else if (isStarted && s.warehouse && s.route) {
+            const originLat = s.warehouse.latitude || 0;
+            const originLng = s.warehouse.longitude || 0;
+            const destLat = s.route.latitude || originLat;
+            const destLng = s.route.longitude || originLng;
+            
+            // Use currentPath to determine actual position along route
+            if (s.currentPath) {
+              try {
+                let pathStr = s.currentPath.replace(/,\s*]/g, ']');
+                const path = JSON.parse(pathStr);
+                if (path.length > 0 && s.assignedDriverId) {
+                  // Fetch driver's current location
+                  try {
+                    const locRes = await api.get(`/driver/location/${s.assignedDriverId}`);
+                    const driverLat = locRes.data?.latitude || originLat;
+                    const driverLng = locRes.data?.longitude || originLng;
+                    
+                    // Find closest point on path
+                    let closestIdx = 0;
+                    let minDist = Infinity;
+                    for (let i = 0; i < path.length; i++) {
+                      const dx = path[i].lat - driverLat;
+                      const dy = path[i].lng - driverLng;
+                      const d = dx * dx + dy * dy;
+                      if (d < minDist) { minDist = d; closestIdx = i; }
+                    }
+                    progress = (path.length > 1) ? closestIdx / (path.length - 1) : 0;
+                  } catch {
+                    progress = 0.05;
+                  }
+                }
+              } catch {
+                progress = 0.05;
+              }
+            }
+          }
 
           return {
             id: `SHP-${s.id}`,
@@ -43,10 +85,10 @@ export default function FleetPage() {
             cargo: s.notes || "Industrial Goods",
             status: status,
             speed: isStarted ? 65 : 0,
-            progress: s.assignmentStatus === "DELIVERED" ? 1 : (isStarted && !isUnassigned ? 0.4 : 0),
+            progress: progress,
             eta: s.route?.estimatedTime || "Pending",
           };
-        });
+        }));
         setFleet(mapped);
       } catch (err) {
         console.error("Failed to fetch fleet data:", err);
@@ -187,9 +229,11 @@ export default function FleetPage() {
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                         truck.status === 'delayed'
                           ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          : progress >= 100
+                          ? 'bg-brand-primary/10 text-brand-primary border border-brand-primary/20'
                           : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                       }`}>
-                        {truck.status === 'delayed' ? 'Delayed' : 'On Route'}
+                        {truck.status === 'delayed' ? 'Delayed' : progress >= 100 ? 'Completed' : 'On Route'}
                       </span>
                     </div>
 

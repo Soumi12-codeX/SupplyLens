@@ -22,6 +22,7 @@ const CITY_COORDINATES = {
 
 const STATUS_STYLES = {
   available: { label: 'Available', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', dot: 'bg-emerald-400' },
+  'on-route': { label: 'On Route', color: 'text-neon-blue', bg: 'bg-neon-blue/10', border: 'border-neon-blue/20', dot: 'bg-neon-blue' },
   offline: { label: 'Offline', color: 'text-slate-500', bg: 'bg-slate-500/10', border: 'border-slate-500/20', dot: 'bg-slate-500' },
 };
 
@@ -89,6 +90,7 @@ export default function ManageDrivers() {
   const stats = [
     { label: 'Total Drivers', value: drivers.length, icon: Users, color: 'text-neon-blue' },
     { label: 'Available', value: drivers.filter(d => d.status === 'available').length, icon: CheckCircle, color: 'text-emerald-400' },
+    { label: 'On Route', value: drivers.filter(d => d.status === 'on-route').length, icon: Truck, color: 'text-neon-blue' },
     { label: 'Offline', value: drivers.filter(d => d.status === 'offline').length, icon: Clock, color: 'text-slate-500' },
   ];
 
@@ -164,7 +166,7 @@ export default function ManageDrivers() {
 
               <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
                 <Filter size={14} className="text-slate-500 shrink-0" />
-                {['all', 'available', 'offline'].map((status) => (
+                {['all', 'available', 'on-route', 'offline'].map((status) => (
                   <button
                     key={status}
                     onClick={() => setFilterStatus(status)}

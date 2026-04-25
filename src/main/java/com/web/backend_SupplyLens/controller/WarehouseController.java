@@ -27,6 +27,19 @@ public class WarehouseController {
 
     @PostMapping("/create")
     public ResponseEntity<?> createWarehouse(@RequestBody Warehouse warehouse) {
+        // Fallback: If coordinates are missing, try to find a city name in the warehouse name
+        if (warehouse.getLatitude() == 0.0 && warehouse.getLongitude() == 0.0) {
+            String name = warehouse.getName();
+            for (String city : com.web.backend_SupplyLens.util.GeoUtils.CITY_COORDINATES.keySet()) {
+                if (name != null && name.toLowerCase().contains(city.toLowerCase())) {
+                    double[] coords = com.web.backend_SupplyLens.util.GeoUtils.CITY_COORDINATES.get(city);
+                    warehouse.setLatitude(coords[0]);
+                    warehouse.setLongitude(coords[1]);
+                    System.out.println(">>> WAREHOUSE: Auto-populated coordinates for city: " + city);
+                    break;
+                }
+            }
+        }
         return ResponseEntity.ok(warehouseRepo.save(warehouse));
     }
 

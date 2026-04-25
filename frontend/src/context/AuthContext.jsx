@@ -8,10 +8,11 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
     const name = localStorage.getItem('name');
+    const id = localStorage.getItem('userId');
     const driverId = localStorage.getItem('driverId');
     const warehouse = JSON.parse(localStorage.getItem('warehouse'));
 
-    return token ? { token, role, name, driverId, warehouse } : null;
+    return token ? { token, role, name, id, driverId, warehouse } : null;
   });
 
   const [loading, setLoading] = useState(true);
@@ -29,6 +30,7 @@ export const AuthProvider = ({ children }) => {
       token,
       role: localStorage.getItem('role'),
       name: localStorage.getItem('name'),
+      id: localStorage.getItem('userId'),
       warehouse: JSON.parse(localStorage.getItem('warehouse'))
     });
 
@@ -50,6 +52,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('token', token);
         localStorage.setItem('role', 'admin');
         localStorage.setItem('name', userData.username);
+        localStorage.setItem('userId', userData.id);
 
         // ✅ STORE WAREHOUSE
         localStorage.setItem('warehouse', JSON.stringify(userData.warehouse));
@@ -58,6 +61,7 @@ export const AuthProvider = ({ children }) => {
           token,
           role: 'admin',
           name: userData.username,
+          id: userData.id,
           warehouse: userData.warehouse
         });
       } else {
@@ -72,12 +76,14 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('role', 'driver');
         localStorage.setItem('driverId', data.driverId);
         localStorage.setItem('name', userData.username);
+        localStorage.setItem('userId', userData.id);
 
         setUser({
           token,
           role: 'driver',
           driverId: data.driverId,
-          name: userData.username
+          name: userData.username,
+          id: userData.id
         });
       }
       return { success: true };

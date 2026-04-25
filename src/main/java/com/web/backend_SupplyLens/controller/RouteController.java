@@ -64,7 +64,7 @@ public class RouteController {
                 // Regex handles both "City, City" and "City -> City"
                 String[] cityNames = nodeSource.split(",\\s*|\\s*->\\s*");
                 for (String cityName : cityNames) {
-                    transitNodeRepo.findByName(cityName.trim())
+                    transitNodeRepo.findFirstByName(cityName.trim())
                             .ifPresent(nodes::add);
                 }
             }
@@ -145,27 +145,32 @@ public class RouteController {
     }
 
     @GetMapping("/driver-link/{shipmentId}")
-    public ResponseEntity<Map<String, String>> getDriverRouteLink(@PathVariable Long shipmentId) {
-        Shipment shipment = shipmentRepo.findById(shipmentId)
-                .orElseThrow(() -> new RuntimeException("Shipment not found"));
+    public ResponseEntity<?> getDriverRouteLink(@PathVariable Long shipmentId) {
+        try {
+            Shipment shipment = shipmentRepo.findById(shipmentId)
+                    .orElseThrow(() -> new RuntimeException("Shipment not found"));
 
-        Map<String, String> response = new HashMap<>();
+            Map<String, String> response = new HashMap<>();
 
-        if ("REROUTED".equals(shipment.getRouteStatus()) && shipment.getActiveRouteOptionId() != null) {
-            // Generate the AI Link
-            String aiLink = redirectService.generateRedirectLinkFromOption(
-                    shipment.getActiveRouteOptionId(),
-                    shipment.getWarehouse().getId(),
-                    shipment.getRoute().getDestination().getId());
-            response.put("type", "AI_REROUTE");
-            response.put("link", aiLink);
-        } else {
-            // Generate the Standard Link
-            String defaultLink = redirectService.generateDefaultRouteLink(shipment.getRoute().getId());
-            response.put("type", "DEFAULT");
-            response.put("link", defaultLink);
+            if ("REROUTED".equals(shipment.getRouteStatus()) && shipment.getActiveRouteOptionId() != null) {
+                // Generate the AI Link
+                String aiLink = redirectService.generateRedirectLinkFromOption(
+                        shipment.getActiveRouteOptionId(),
+                        shipment.getWarehouse().getId(),
+                        shipment.getRoute().getDestination().getId());
+                response.put("type", "AI_REROUTE");
+                response.put("link", aiLink);
+            } else {
+                // Generate the Standard Link
+                String defaultLink = redirectService.generateDefaultRouteLink(shipment.getRoute().getId());
+                response.put("type", "DEFAULT");
+                response.put("link", defaultLink);
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Unknown exception"));
         }
-
-        return ResponseEntity.ok(response);
     }
 }

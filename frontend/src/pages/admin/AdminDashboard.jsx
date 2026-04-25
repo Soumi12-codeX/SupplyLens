@@ -14,6 +14,7 @@ import {
   Truck, AlertTriangle, Activity, Clock,
   CheckCircle, X, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { CircleMarker, Tooltip } from 'react-leaflet';
 
 // Severity config for the feed bar
 const SEV = {
@@ -41,45 +42,117 @@ export default function AdminDashboard() {
     const fetchShipments = async () => {
       try {
         const warehouseId = user?.warehouse?.id;
-        const url = warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments';
+        const adminId = user?.id;
+        const url = adminId ? `/admin/shipments?adminId=${adminId}` : (warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments');
         const res = await api.get(url);
-        const realShipments = transformShipments(res.data);
-        setFleet(realShipments);
+        setShipments(res.data);
+        setFleet(prevFleet => {
+          return transformShipments(res.data, prevFleet);
+        });
       } catch (err) {
         console.error("Error fetching shipments:", err);
       }
     };
 
     fetchShipments();
-    const pollInterval = setInterval(fetchShipments, 30000); // Poll every 30s
+    const pollInterval = setInterval(fetchShipments, 15000); // Poll shipments every 15s
     
-    // Local simulation for smooth progress
-    const simInterval = setInterval(() => {
-      setFleet(prevFleet => prevFleet.map(truck => {
-        if (truck.status === 'on-route' && truck.progress < 1) {
-          const newProgress = Math.min(1, truck.progress + 0.001);
-          // Interpolate position
-          const lat = truck.originPosition.lat + (truck.destinationPosition.lat - truck.originPosition.lat) * newProgress;
-          const lng = truck.originPosition.lng + (truck.destinationPosition.lng - truck.originPosition.lng) * newProgress;
+    // Real-time driver location polling for smooth progress
+    const locInterval = setInterval(async () => {
+      let currentFleet = [];
+      setFleet(prevFleet => {
+        currentFleet = prevFleet;
+        return prevFleet;
+      });
+      
+      // Fetch driver positions for all active shipments
+      try {
+        const updates = await Promise.all(
+          currentFleet.filter(t => t.status === 'on-route' && t.driverId).map(async (t) => {
+            try {
+              const locRes = await api.get(`/driver/location/${t.driverId}`);
+              return { id: t.id, lat: locRes.data.latitude, lng: locRes.data.longitude };
+            } catch { return null; }
+          })
+        );
+        
+        setFleet(prevFleet => prevFleet.map(truck => {
+          const update = updates.find(u => u && u.id === truck.id);
+          if (!update) return truck;
+          
+          // Dynamic progress: find nearest point on route to current position
+          let progressFraction = truck.progress;
+          let closestIdx = 0;
+          if (truck.route && truck.route.length >= 2) {
+            let minDist = Infinity;
+            for (let i = 0; i < truck.route.length; i++) {
+              const dx = truck.route[i].lat - update.lat;
+              const dy = truck.route[i].lng - update.lng;
+              const d = dx * dx + dy * dy;
+              if (d < minDist) { minDist = d; closestIdx = i; }
+            }
+            progressFraction = closestIdx / (truck.route.length - 1);
+          }
+          
           return {
-             ...truck,
-             progress: newProgress,
-             currentPosition: { lat, lng }
+            ...truck,
+            progress: progressFraction,
+            progressIndex: closestIdx,
+            currentPosition: { lat: update.lat, lng: update.lng }
           };
-        }
-        return truck;
-      }));
-    }, 2000);
+        }));
+      } catch (err) {
+        // Silent fail — will retry on next interval
+      }
+    }, 3000);
 
     return () => {
       clearInterval(pollInterval);
-      clearInterval(simInterval);
+      clearInterval(locInterval);
     };
   }, []);
 
-  const transformShipments = (backendShipments) => {
+  // Fetch Alerts
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await api.get('/alerts/all');
+        const activeAlerts = res.data.filter(a => a.status === 'PENDING');
+        const formattedAlerts = activeAlerts.map(a => ({
+          id: a.id,
+          truckId: a.affectedShipmentIds ? `SHP-${a.affectedShipmentIds.split(',')[0]}` : 'Unknown',
+          driverName: "Affected Driver",
+          title: "AI Route Optimization",
+          description: a.messsage || "Obstacle detected. Rerouting recommended.",
+          affectedArea: a.nodeName || "Unknown Node",
+          timestamp: a.time,
+          severity: a.severity === 1 ? 'critical' : (a.severity === 2 ? 'high' : 'medium'),
+          icon: <AlertTriangle size={20} className="text-red-400" />,
+          routeOptions: a.routeOptions?.map(ro => ({
+            id: ro.id,
+            label: ro.label,
+            path: ro.path,
+            estimatedHours: ro.estimatedHours,
+            riskLevel: ro.riskLevel,
+            tradeoff: ro.tradeoff
+          })) || []
+        }));
+        setAlerts(formattedAlerts);
+      } catch (err) {
+        console.error("Error fetching alerts:", err);
+      }
+    };
+
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const transformShipments = (backendShipments, prevFleet = []) => {
     return backendShipments
       .map((s) => {
+        const existing = prevFleet.find(t => t.id === `SHP-${s.id}`);
+        
         const origin = { 
           lat: s.warehouse?.latitude || 20.5937, 
           lng: s.warehouse?.longitude || 78.9629 
@@ -92,9 +165,13 @@ export default function AdminDashboard() {
         const isUnassigned = s.assignmentStatus === "UNASSIGNED";
         const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
         
-        // Stagger base progress so they don't perfectly stack on the route line
-        const baseProgress = s.assignmentStatus === "DELIVERED" ? 1 : 0.02 + ((s.id % 20) * 0.04);
-        const progress = isStarted ? baseProgress : 0;
+        // Dynamic progress: preserved from existing or fallback to 0.02
+        let progress = 0;
+        if (s.assignmentStatus === "DELIVERED") {
+          progress = 1;
+        } else if (isStarted) {
+          progress = existing?.progress || 0.02;
+        }
 
         let status = "delayed";
         if (s.assignmentStatus === "DELIVERED") status = "delivered";
@@ -105,8 +182,31 @@ export default function AdminDashboard() {
         const jitterLat = (!isStarted && !isUnassigned) ? 0 : (Math.sin(s.id * 10) * 0.02);
         const jitterLng = (!isStarted && !isUnassigned) ? 0 : (Math.cos(s.id * 10) * 0.02);
 
+        let parsedRoute = [];
+        if (s.currentPath) {
+          try {
+            let jsonStr = s.currentPath.replace(/,\s*]/g, ']');
+            parsedRoute = JSON.parse(jsonStr);
+          } catch (e) {
+            console.error("Failed to parse currentPath", e);
+          }
+        }
+
+        let currentPos = {
+          lat: origin.lat + (dest.lat - origin.lat) * progress + jitterLat,
+          lng: origin.lng + (dest.lng - origin.lng) * progress + jitterLng,
+        };
+        let closestIdx = 0;
+
+        if (parsedRoute.length >= 2) {
+           const routeIdx = Math.min(parsedRoute.length - 1, Math.max(0, Math.floor(progress * (parsedRoute.length - 1))));
+           currentPos = { lat: parsedRoute[routeIdx].lat + jitterLat, lng: parsedRoute[routeIdx].lng + jitterLng };
+           closestIdx = routeIdx;
+        }
+
         return {
           id: `SHP-${s.id}`,
+          driverId: s.assignedDriverId || null,
           driver: s.assignedDriverId || "Awaiting Assignment",
           originName: s.warehouse?.name || "Warehouse",
           destinationName: s.route?.path?.split(" -> ").pop() || "Destination",
@@ -114,15 +214,13 @@ export default function AdminDashboard() {
           status: status,
           speed: isStarted ? 60 : 0,
           progress: progress,
+          progressIndex: closestIdx,
           eta: s.route?.estimatedTime || "Pending",
           distanceRemaining: s.route?.distance ? `${s.route.distance} km` : "200 km",
           originPosition: origin,
           destinationPosition: dest,
-          currentPosition: {
-            lat: origin.lat + (dest.lat - origin.lat) * progress + jitterLat,
-            lng: origin.lng + (dest.lng - origin.lng) * progress + jitterLng,
-          },
-          route: [] 
+          currentPosition: currentPos,
+          route: parsedRoute 
         };
       });
   };
@@ -132,13 +230,32 @@ export default function AdminDashboard() {
     setMapZoom(8);
   }, []);
 
-  const handleApproveAlert = (alert) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-    setRoadConditions((prev) => prev.filter((c) => c.alertId !== alert.id));
+  const handleApproveAlert = async (alert) => {
+    try {
+      const bestOption = alert.routeOptions?.[0];
+      if (!bestOption) return;
+
+      const shipmentIdStr = alert.truckId.replace('SHP-', '');
+      const shipment = shipments.find(s => s.id.toString() === shipmentIdStr);
+      const sourceWhId = shipment?.warehouse?.id || 1;
+      const destWhId = shipment?.route?.destination?.id || 2;
+
+      await api.post(`/alerts/${alert.id}/select-route/${bestOption.id}?sourceWhId=${sourceWhId}&destWhId=${destWhId}`);
+      
+      setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+      setRoadConditions((prev) => prev.filter((c) => c.alertId !== alert.id));
+    } catch (err) {
+      console.error("Failed to approve alert:", err);
+    }
   };
 
-  const handleDismissAlert = (alertId) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+  const handleDismissAlert = async (alertId) => {
+    try {
+      await api.post(`/alerts/${alertId}/dismiss`);
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+    } catch (err) {
+      console.error("Failed to dismiss alert:", err);
+    }
   };
 
   const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
@@ -158,7 +275,7 @@ export default function AdminDashboard() {
   }, [fleet]);
 
   const stats = [
-    { label: 'Active Trucks',  value: fleet.filter((t) => t.status === 'on-route').length, icon: Truck,          color: 'text-neon-blue'  },
+    { label: 'Active Trucks',  value: fleet.filter((t) => t.status === 'on-route' || t.progress >= 1).length, icon: Truck,          color: 'text-neon-blue'  },
     { label: 'Delayed',        value: fleet.filter((t) => t.status === 'delayed').length,  icon: AlertTriangle,  color: 'text-red-400'    },
     { label: 'Open Alerts',    value: alerts.length,                                        icon: Activity,       color: 'text-orange-400' },
     { label: 'Avg Speed',      value: fleet.length ? `${Math.floor(fleet.reduce((s, t) => s + t.speed, 0) / fleet.length)} km/h` : '—', icon: Clock, color: 'text-emerald-400' },
@@ -310,8 +427,79 @@ export default function AdminDashboard() {
                     isSelected={selectedTruck?.id === truck.id}
                     onClick={handleSelectTruck}
                   />
-                  {selectedTruck?.id === truck.id && (
-                    <RouteOverlay route={truck.route} isActive />
+                  {selectedTruck?.id === truck.id && truck.route && truck.route.length >= 2 && (
+                    <>
+                      <RouteOverlay 
+                        route={truck.route} 
+                        isActive={truck.status === 'on-route' || truck.status === 'delayed'} 
+                        progressIndex={truck.progressIndex || 0}
+                      />
+                      {/* Origin marker — Green */}
+                      <CircleMarker
+                        center={[truck.route[0].lat, truck.route[0].lng]}
+                        radius={8}
+                        pathOptions={{
+                          fillColor: '#22c55e',
+                          fillOpacity: 1,
+                          color: '#ffffff',
+                          weight: 2,
+                          opacity: 0.9,
+                        }}
+                      >
+                        <Tooltip 
+                          direction="top" 
+                          offset={[0, -12]} 
+                          opacity={1} 
+                          permanent={true}
+                          className="origin-destination-label"
+                        >
+                          <div style={{
+                            background: 'rgba(15, 23, 42, 0.95)',
+                            border: '1px solid rgba(34, 197, 94, 0.4)',
+                            borderRadius: '8px',
+                            padding: '4px 10px',
+                            backdropFilter: 'blur(8px)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                          }}>
+                            <span style={{ color: '#22c55e', fontSize: '10px', fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>⬤ </span>
+                            <span style={{ color: '#ffffff', fontSize: '11px', fontWeight: 700 }}>{truck.originName}</span>
+                          </div>
+                        </Tooltip>
+                      </CircleMarker>
+
+                      {/* Destination marker — Red */}
+                      <CircleMarker
+                        center={[truck.route[truck.route.length - 1].lat, truck.route[truck.route.length - 1].lng]}
+                        radius={8}
+                        pathOptions={{
+                          fillColor: '#ef4444',
+                          fillOpacity: 1,
+                          color: '#ffffff',
+                          weight: 2,
+                          opacity: 0.9,
+                        }}
+                      >
+                        <Tooltip 
+                          direction="top" 
+                          offset={[0, -12]} 
+                          opacity={1} 
+                          permanent={true}
+                          className="origin-destination-label"
+                        >
+                          <div style={{
+                            background: 'rgba(15, 23, 42, 0.95)',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            borderRadius: '8px',
+                            padding: '4px 10px',
+                            backdropFilter: 'blur(8px)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                          }}>
+                            <span style={{ color: '#ef4444', fontSize: '10px', fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>⬤ </span>
+                            <span style={{ color: '#ffffff', fontSize: '11px', fontWeight: 700 }}>{truck.destinationName}</span>
+                          </div>
+                        </Tooltip>
+                      </CircleMarker>
+                    </>
                   )}
                 </React.Fragment>
               ))}

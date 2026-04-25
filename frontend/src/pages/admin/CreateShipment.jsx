@@ -88,15 +88,21 @@ export default function CreateShipment() {
       const shipmentPayload = {
         route: { id: parseInt(selectedRouteId) },
         status: "CREATED",
-      assignmentStatus: "ASSIGNED",
+      assignmentStatus: "UNASSIGNED",
       // Extra details for record keeping
       notes: notes,
       priority: priority
     };
 
+    if (!user?.id) {
+      alert("Session error: Admin ID not found. Please log out and log back in.");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await api.post(
-        `/shipments/create?warehouseId=${pickupWarehouse}`,
+        `/shipments/create?warehouseId=${pickupWarehouse}&adminId=${user.id}`,
         shipmentPayload
       );
 

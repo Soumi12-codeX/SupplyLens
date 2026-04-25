@@ -16,6 +16,7 @@ import com.web.backend_SupplyLens.dto.DriverLocationRequest;
 import com.web.backend_SupplyLens.model.Shipment;
 import com.web.backend_SupplyLens.repository.DriverLocationRepository;
 import com.web.backend_SupplyLens.repository.ShipmentRepository;
+import com.web.backend_SupplyLens.repository.UserRepository;
 import com.web.backend_SupplyLens.security.JwtService;
 import com.web.backend_SupplyLens.service.DriverService;
 import com.web.backend_SupplyLens.service.RedirectService;
@@ -35,6 +36,9 @@ public class DriverController {
 
     @Autowired
     private ShipmentRepository shipmentRepo;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     private ShipmentService shipmentService;
@@ -75,7 +79,16 @@ public class DriverController {
         // mark driver available again for next assignment
         locationRepo.findByDriverId(shipment.getAssignedDriverId()).ifPresent(loc -> {
             loc.setAvailable(true);
-            locationRepo.save(loc);
+            
+            // Auto-return to base city coordinates
+            userRepository.findByDriverId(shipment.getAssignedDriverId()).ifPresent(user -> {
+                if (user.getLatitude() != null && user.getLongitude() != null) {
+                    loc.setLatitude(user.getLatitude());
+                    loc.setLongitude(user.getLongitude());
+                }
+            });
+
+            locationRepo.saveAndFlush(loc);
 
             // Driver found! Try assigning them to another pending shipment immediately
             shipmentService.checkAndAssignPendingShipments();
@@ -143,7 +156,14 @@ public class DriverController {
 
         // 3. Generate Google Maps link
         try {
-            String link = redirectService.generateDefaultRouteLink(activeShipment.getRoute().getId());
+            String link;
+            if ("REROUTED".equals(activeShipment.getRouteStatus()) && activeShipment.getActiveRouteOptionId() != null) {
+                Long sourceWhId = activeShipment.getWarehouse() != null ? activeShipment.getWarehouse().getId() : 1L;
+                Long destWhId = activeShipment.getRoute().getDestination().getId();
+                link = redirectService.generateRedirectLinkFromOption(activeShipment.getActiveRouteOptionId(), sourceWhId, destWhId);
+            } else {
+                link = redirectService.generateDefaultRouteLink(activeShipment.getRoute().getId());
+            }
             return ResponseEntity.ok(Map.of(
                     "driverId", driverId,
                     "shipmentId", activeShipment.getId(),

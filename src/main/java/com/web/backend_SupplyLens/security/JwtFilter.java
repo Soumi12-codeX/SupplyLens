@@ -56,11 +56,10 @@ public class JwtFilter extends OncePerRequestFilter {
             String role = jwtService.extractRole(token);
             if (role != null) role = role.toUpperCase();
 
-            System.out.println(">>> JWT VALID - User: " + username + ", Role: " + role);
+            System.out.println(">>> AUTH: Token extracted. User: " + username + ", Role: " + role);
 
             User user = userRepo.findByEmail(username).orElse(null);
             
-            // If email check fails, try driverId check (for drivers)
             if (user == null) {
                 user = userRepo.findByDriverId(username).orElse(null);
             }
@@ -71,13 +70,12 @@ public class JwtFilter extends OncePerRequestFilter {
                         authorities);
 
                 SecurityContextHolder.getContext().setAuthentication(authToken);
-                System.out.println(">>> AUTH SUCCESS: Security context set for user: " + username + " with role: ROLE_" + role);
+                System.out.println(">>> AUTH SUCCESS: Security context set for: " + username);
             } else {
-                System.err.println(">>> AUTH FAILED: User " + username + " not found in database!");
+                System.err.println(">>> AUTH FAILURE: User '" + username + "' not found in DB!");
             }
         } catch (Exception e) {
-            System.out.println(">>> JWT VALIDATION ERROR: " + e.getMessage());
-            // Clear context to be safe if a bad token was provided
+            System.err.println(">>> AUTH ERROR: JWT Validation failed: " + e.getMessage());
             SecurityContextHolder.clearContext();
         }
 

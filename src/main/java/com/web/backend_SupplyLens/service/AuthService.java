@@ -13,26 +13,12 @@ import com.web.backend_SupplyLens.repository.UserRepository;
 import com.web.backend_SupplyLens.repository.WarehouseRepository;
 import com.web.backend_SupplyLens.security.JwtService;
 
+import com.web.backend_SupplyLens.util.GeoUtils;
+
 import java.time.LocalDateTime;
 
 @Service
 public class AuthService {
-
-    // Fallback coordinate mapping for systemic consistency
-    private static final java.util.Map<String, double[]> CITY_COORDINATES = new java.util.HashMap<>();
-    static {
-        CITY_COORDINATES.put("Kolkata", new double[] { 22.5726, 88.3639 });
-        CITY_COORDINATES.put("Howrah", new double[] { 22.5958, 88.2636 });
-        CITY_COORDINATES.put("Mumbai", new double[] { 19.0760, 72.8777 });
-        CITY_COORDINATES.put("Delhi", new double[] { 28.6139, 77.2090 });
-        CITY_COORDINATES.put("Bangalore", new double[] { 12.9716, 77.5946 });
-        CITY_COORDINATES.put("Hyderabad", new double[] { 17.3850, 78.4867 });
-        CITY_COORDINATES.put("Chennai", new double[] { 13.0827, 80.2707 });
-        CITY_COORDINATES.put("Pune", new double[] { 18.5204, 73.8567 });
-        CITY_COORDINATES.put("Ahmedabad", new double[] { 23.0225, 72.5714 });
-        CITY_COORDINATES.put("Jaipur", new double[] { 26.9124, 75.7873 });
-        CITY_COORDINATES.put("Lucknow", new double[] { 26.8467, 80.9462 });
-    }
 
     @Autowired
     private UserRepository userRepo;
@@ -71,6 +57,36 @@ public class AuthService {
             throw new RuntimeException("Invalid pin!");
         }
         String token = jwtService.generateToken(driver.getDriverId(), driver.getRole());
+
+        // Ensure DriverLocation exists and is marked as available on login
+        driverLocationRepo.findByDriverId(driver.getDriverId()).ifPresentOrElse(
+            loc -> {
+                loc.setAvailable(true);
+                driverLocationRepo.save(loc);
+            },
+            () -> {
+                DriverLocation location = new DriverLocation();
+                location.setDriverId(driver.getDriverId());
+                location.setAvailable(true);
+                
+                double lat = driver.getLatitude() != null ? driver.getLatitude() : 0.0;
+                double lng = driver.getLongitude() != null ? driver.getLongitude() : 0.0;
+                
+                if (lat == 0.0 && lng == 0.0 && driver.getCity() != null) {
+                    double[] coords = GeoUtils.CITY_COORDINATES.get(driver.getCity());
+                    if (coords != null) {
+                        lat = coords[0];
+                        lng = coords[1];
+                    }
+                }
+                
+                location.setLatitude(lat != 0.0 ? lat : 20.5937);
+                location.setLongitude(lng != 0.0 ? lng : 78.9629);
+                location.setLastUpdated(LocalDateTime.now());
+                driverLocationRepo.save(location);
+            }
+        );
+
         return new AuthResponse(token, driver);
     }
 
@@ -105,7 +121,7 @@ public class AuthService {
         // Fallback coordinate population from city name
         if ("DRIVER".equalsIgnoreCase(user.getRole()) && user.getCity() != null) {
             if (user.getLatitude() == null || user.getLongitude() == null) {
-                double[] coords = CITY_COORDINATES.get(user.getCity());
+                double[] coords = GeoUtils.CITY_COORDINATES.get(user.getCity());
                 if (coords != null) {
                     System.out.println(">>> BACKEND FALLBACK: Populating coordinates for " + user.getCity());
                     user.setLatitude(coords[0]);

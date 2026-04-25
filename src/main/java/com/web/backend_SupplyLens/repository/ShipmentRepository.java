@@ -21,11 +21,15 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     @Query("SELECT s FROM Shipment s JOIN FETCH s.warehouse JOIN FETCH s.route WHERE s.warehouse.id = :warehouseId")
     List<Shipment> findByWarehouse_Id(@Param("warehouseId") Long warehouseId);
     
+    List<Shipment> findByAdminId(Long adminId);
+    
     // Find shipments that need a driver: either explicitly UNASSIGNED 
     // or ASSIGNED but missing a driver ID (stuck shipments)
     @Query("SELECT s FROM Shipment s WHERE s.assignmentStatus = 'UNASSIGNED' OR (s.assignmentStatus = 'ASSIGNED' AND s.assignedDriverId IS NULL)")
     List<Shipment> findPendingAssignments();
 
-    @Query("SELECT s FROM Shipment s JOIN s.route r WHERE LOWER(r.path) LIKE LOWER(CONCAT('%', :nodeName, '%'))")
-List<Shipment> findAffectedByNode(@Param("nodeName") String nodeName);
+    @Query("SELECT s FROM Shipment s JOIN s.route r WHERE LOWER(r.path) LIKE LOWER(CONCAT('%', :nodeName, '%')) AND s.assignmentStatus != 'DELIVERED'")
+    List<Shipment> findAffectedByNode(@Param("nodeName") String nodeName);
+    long countByAssignedDriverIdAndAssignmentStatus(String driverId, String status);
+    long countByAssignedDriverIdAndAssignmentStatusNot(String driverId, String status);
 }

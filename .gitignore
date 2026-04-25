@@ -78,3 +78,9 @@ repopulate_routes.sql
 seed_hubs.sql
 seed_nodes.sql
 supply_chain_db_backup.sql
+*.log
+boot_run_output.txt
+run_log.txt
+run_log_final.txt
+tmp_shipments.json
+ai_debug.log

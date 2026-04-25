@@ -12,6 +12,7 @@ import com.web.backend_SupplyLens.model.DriverLocation;
 import com.web.backend_SupplyLens.model.Shipment;
 import com.web.backend_SupplyLens.model.User;
 import com.web.backend_SupplyLens.repository.DriverLocationRepository;
+import com.web.backend_SupplyLens.repository.ShipmentRepository;
 import com.web.backend_SupplyLens.repository.UserRepository;
 import com.web.backend_SupplyLens.service.ShipmentService;
 import java.util.ArrayList;
@@ -31,12 +32,20 @@ public class AdminController {
     private DriverLocationRepository driverLocationRepository;
 
     @Autowired
+    private ShipmentRepository shipmentRepository;
+
+    @Autowired
     private com.web.backend_SupplyLens.repository.WarehouseRepository warehouseRepository;
 
     @GetMapping("/shipments")
-    public List<Shipment> getAll(@org.springframework.web.bind.annotation.RequestParam(required = false) Long warehouseId) {
-        System.out.println(">>> ADMIN FETCH SHIPMENTS - WarehouseID Filter: " + warehouseId);
-        if (warehouseId != null) {
+    public List<Shipment> getAll(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Long warehouseId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Long adminId) {
+        System.out.println(">>> ADMIN FETCH SHIPMENTS - WarehouseID: " + warehouseId + ", AdminID: " + adminId);
+        
+        if (adminId != null) {
+            return shipmentService.getShipmentsByAdmin(adminId);
+        } else if (warehouseId != null) {
             return shipmentService.getShipmentsByWarehouse(warehouseId);
         }
         return shipmentService.getAllShipments();
@@ -64,10 +73,20 @@ public class AdminController {
             Optional<DriverLocation> locOpt = driverLocationRepository.findByDriverId(driver.getDriverId());
             if (locOpt.isPresent()) {
                 DriverLocation loc = locOpt.get();
-                if (!loc.isAvailable()) {
-                    continue; // Skip On-Route drivers for security/privacy
+                
+                // CRITICAL: Check the SHIPMENT TABLE directly, not just the available flag
+                // The available flag can become stale due to race conditions
+                long activeShipments = shipmentRepository.countByAssignedDriverIdAndAssignmentStatusNot(
+                    driver.getDriverId(), "DELIVERED");
+                
+                if (activeShipments > 0) {
+                    status = "on-route";
+                } else if (loc.isAvailable()) {
+                    status = "available";
+                } else {
+                    // Flag says unavailable but no active shipments — fix the stale flag
+                    status = "available";
                 }
-                status = "available";
             }
 
             DriverDTO dto = new DriverDTO(
@@ -81,6 +100,15 @@ public class AdminController {
                 driver.getLongitude()
             );
 
+            // Fetch actual trip count from shipment table
+            long tripCount = shipmentRepository.countByAssignedDriverIdAndAssignmentStatus(driver.getDriverId(), "DELIVERED");
+            dto.setTrips((int) tripCount);
+
+            // Use driver's HOME CITY (profile) coordinates for distance filtering
+            // This matches exactly what the assignment engine uses
+            double driverLat = (driver.getLatitude() != null) ? driver.getLatitude() : 0.0;
+            double driverLng = (driver.getLongitude() != null) ? driver.getLongitude() : 0.0;
+
             // Calculate distance if origin warehouse is provided
             if (originWarehouse != null) {
                 // Exact City Match Check
@@ -88,14 +116,14 @@ public class AdminController {
                     dto.setLocal(true);
                     dto.setDistance(0.0);
                     driverDTOs.add(dto);
-                } else if (driver.getLatitude() != null && driver.getLongitude() != null) {
+                } else if (driverLat != 0.0 && driverLng != 0.0) {
                     double dist = calculateDistance(
                         originWarehouse.getLatitude(), originWarehouse.getLongitude(),
-                        driver.getLatitude(), driver.getLongitude()
+                        driverLat, driverLng
                     );
                     
-                    // Filter: Only include drivers within 200km operational radius
-                    if (dist <= 200.0) {
+                    // Filter: Sync with ShipmentService operational radius (300km)
+                    if (dist <= 300.0) {
                         dto.setDistance(Math.round(dist * 10.0) / 10.0);
                         driverDTOs.add(dto);
                     }

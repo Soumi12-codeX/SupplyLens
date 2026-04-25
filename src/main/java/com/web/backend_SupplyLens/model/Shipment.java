@@ -42,11 +42,19 @@ public class Shipment {
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;     // which warehouse this shipment is from
 
+    private Long adminId;            // ID of the admin who created this shipment
+
     public Long getId() {
         return id;
     }
     public void setId(Long id) {
         this.id = id;
+    }
+    public Long getAdminId() {
+        return adminId;
+    }
+    public void setAdminId(Long adminId) {
+        this.adminId = adminId;
     }
     public Transport getTransport() {
         return transport;

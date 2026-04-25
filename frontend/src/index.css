@@ -282,3 +282,15 @@ html, body {
 .warehouse-tooltip.leaflet-tooltip::before {
   display: none !important;
 }
+
+/* Origin/Destination Map Labels */
+.origin-destination-label.leaflet-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.origin-destination-label.leaflet-tooltip::before {
+  display: none !important;
+}

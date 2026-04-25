@@ -69,9 +69,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/**").permitAll()
+                        .requestMatchers("/api/alerts/**").permitAll()
+                        .requestMatchers("/api/route/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/warehouse/all").permitAll()   
                         .requestMatchers(HttpMethod.POST, "/api/warehouse/create").permitAll() 
-                        .requestMatchers("/api/alerts/from-python").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         
                         // Broad rules after specific ones
@@ -79,8 +81,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/driver/**").hasAnyRole("DRIVER", "ADMIN")
                         .requestMatchers("/api/shipments/**").hasRole("ADMIN")
                         .requestMatchers("/api/transport/**").hasRole("ADMIN")
-                        .requestMatchers("/api/alerts/**").permitAll()
-                        .requestMatchers("/api/route/**").permitAll()// Drivers might also need routes
                         .requestMatchers("/api/warehouse/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

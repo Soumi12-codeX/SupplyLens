@@ -49,14 +49,16 @@ export default function TruckList({ trucks, alerts = [], selectedId, onSelect })
                 </div>
                 <span className="text-white text-sm font-medium">{truck.id}</span>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                 truck.status === 'delayed'
                   ? 'bg-red-500/10 text-red-400 border border-red-500/20'
                   : truck.status === 'awaiting-dispatch'
                   ? 'bg-neon-blue/10 text-neon-blue border border-neon-blue/20'
+                  : truck.progress >= 1
+                  ? 'bg-brand-primary/10 text-brand-primary border border-brand-primary/20'
                   : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               }`}>
-                {truck.status === 'delayed' ? 'Delayed' : (truck.status === 'awaiting-dispatch' ? 'Pending' : 'On Route')}
+                {truck.status === 'delayed' ? 'Delayed' : (truck.status === 'awaiting-dispatch' ? 'Pending' : truck.progress >= 1 ? 'Completed' : 'On Route')}
               </span>
             </div>
             <p className="text-slate-400 text-xs">{truck.driver}</p>

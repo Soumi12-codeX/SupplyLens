@@ -56,6 +56,27 @@ const CITY_COORDINATES = {
   'Vadodara': { lat: 22.3072, lon: 73.1812 },
 };
 
+const ORDERED_CITIES = [
+  // Kolkata Hub
+  'Kolkata', 'Salt Lake', 'Newtown', 'Hooghly', 'Durgapur', 'Asansol', 'Kharagpur', 'Haldia',
+  // Mumbai Hub
+  'Mumbai', 'Thane', 'Navi Mumbai', 'Kalyan',
+  // Bangalore Hub
+  'Bangalore', 'Hosur', 'Tumkur', 'Mysore',
+  // Hyderabad Hub
+  'Hyderabad', 'Secunderabad', 'Warangal',
+  // Chennai Hub
+  'Chennai', 'Kanchipuram', 'Tiruvallur',
+  // Pune Hub
+  'Pune', 'Pimpri-Chinchwad',
+  // Ahmedabad Hub
+  'Ahmedabad', 'Gandhinagar', 'Vadodara',
+  // Jaipur Hub
+  'Jaipur', 'Ajmer',
+  // Lucknow Hub
+  'Lucknow', 'Kanpur', 'Prayagraj'
+];
+
 export default function RegisterPage() {
   const [selectedRole, setSelectedRole] = useState(null);
   const [name, setName] = useState('');
@@ -352,7 +373,7 @@ export default function RegisterPage() {
                     required
                   >
                     <option value="" className="bg-slate-900">Choose your city...</option>
-                    {Object.keys(CITY_COORDINATES).map((c) => (
+                    {ORDERED_CITIES.map((c) => (
                       <option key={c} value={c} className="bg-slate-900">{c}</option>
                     ))}
                   </select>

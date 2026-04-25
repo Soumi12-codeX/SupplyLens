@@ -35,36 +35,39 @@ public class RedirectService {
                 .orElseThrow(() -> new RuntimeException("Route not found"));
 
         String nodeSource = route.getPath();
+        if (nodeSource == null) return "https://www.google.com/maps";
+        
         String delimiter = nodeSource.contains("->") ? "\\s*->\\s*" : ",\\s*";
         List<String> cityNames = Arrays.asList(nodeSource.split(delimiter));
 
         List<TransitNode> nodes = cityNames.stream()
                 .map(city -> {
-                    // 1. Slice out anything after a parenthesis (e.g., "Jaipur (Direct)" ->
-                    // "Jaipur")
-                    // 2. Trim whitespace
                     String cleanCity = city.split("\\(")[0].trim();
-
-                    TransitNode n = coordinateService.getCoordinates(cleanCity);
-                    if (n == null) {
-                        throw new RuntimeException("Coordinate not found for: " + cleanCity);
-                    }
-                    return n;
+                    return coordinateService.getCoordinates(cleanCity);
                 })
+                .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
 
-        // ... rest of the origin/destination/waypoints logic remains the same ...
+        if (nodes.isEmpty()) {
+            return "https://www.google.com/maps/dir/?api=1&origin=" + route.getSource().getCity() + "&destination=" + route.getDestination().getCity();
+        }
 
-        // Ensure you are using the correct Google Maps URL format we discussed:
         String origin = nodes.get(0).getLatitude() + "," + nodes.get(0).getLongitude();
-        String destination = nodes.get(nodes.size() - 1).getLatitude() + ","
-                + nodes.get(nodes.size() - 1).getLongitude();
+        String destination = nodes.get(nodes.size() - 1).getLatitude() + "," + nodes.get(nodes.size() - 1).getLongitude();
+
+        List<String> waypointsList = new ArrayList<>();
+        for (int i = 1; i < nodes.size() - 1; i++) {
+            waypointsList.add(nodes.get(i).getLatitude() + "," + nodes.get(i).getLongitude());
+        }
+        String waypoints = String.join("|", waypointsList);
 
         StringBuilder url = new StringBuilder("https://www.google.com/maps/dir/?api=1");
         url.append("&origin=").append(origin);
         url.append("&destination=").append(destination);
+        if (!waypoints.isEmpty()) {
+            url.append("&waypoints=").append(waypoints);
+        }
         url.append("&travelmode=driving");
-
         return url.toString();
     }
 

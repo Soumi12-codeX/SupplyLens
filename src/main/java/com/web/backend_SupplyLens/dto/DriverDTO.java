@@ -11,6 +11,7 @@ public class DriverDTO {
     private Double latitude;
     private Double longitude;
     private boolean isLocal; // True if in same city as origin warehouse
+    private int trips;
 
     public DriverDTO() {}
 
@@ -112,5 +113,13 @@ public class DriverDTO {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public int getTrips() {
+        return trips;
+    }
+
+    public void setTrips(int trips) {
+        this.trips = trips;
     }
 }

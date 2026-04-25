@@ -3,21 +3,38 @@ import { MapContainer, TileLayer, useMap, ZoomControl, useMapEvents } from 'reac
 import 'leaflet/dist/leaflet.css';
 
 // Component to programmatically set map center and manage auto-pan
-function MapController({ center, zoom }) {
+function MapController({ center, zoom, route }) {
   const map = useMap();
   const [autoPan, setAutoPan] = useState(true);
+  const hasFittedBounds = React.useRef(false);
 
   useMapEvents({
-    dragstart: () => {
-      setAutoPan(false);
-    }
+    dragstart: () => setAutoPan(false),
+    zoomstart: () => {
+      // Only disable autoPan if the user is manually zooming (not programmatic)
+      // We detect this by checking if the zoom was triggered by scroll/pinch
+    },
   });
 
+  // Fit bounds ONCE when a route first appears (preview mode)
+  useEffect(() => {
+    if (route && route.length >= 2 && map && !hasFittedBounds.current) {
+      const bounds = route.map(p => [p.lat, p.lng]);
+      map.fitBounds(bounds, { padding: [50, 50], animate: true, duration: 2 });
+      hasFittedBounds.current = true;
+    }
+    // Reset the flag when route disappears (trip delivered, back to idle)
+    if (!route) {
+      hasFittedBounds.current = false;
+    }
+  }, [route?.length, map]);
+
+  // Smoothly follow the truck position (auto-pan)
   useEffect(() => {
     if (center && autoPan) {
-      map.setView(center, zoom || map.getZoom(), { animate: true, duration: 1.5 });
+      map.setView(center, map.getZoom(), { animate: true, duration: 1 });
     }
-  }, [center?.[0], center?.[1], autoPan, map, zoom]);
+  }, [center?.[0], center?.[1], autoPan, map]);
 
   return (
     !autoPan ? (
@@ -27,7 +44,7 @@ function MapController({ center, zoom }) {
             e.preventDefault();
             e.stopPropagation();
             if (center) {
-              map.setView(center, zoom || map.getZoom(), { animate: true, duration: 1.5 });
+              map.setView(center, map.getZoom(), { animate: true, duration: 1.5 });
               setAutoPan(true);
             }
           }}
@@ -40,7 +57,7 @@ function MapController({ center, zoom }) {
   );
 }
 
-export default function MapView({ center = [20.5937, 78.9629], zoom = 5, children, className = '' }) {
+export default function MapView({ center = [20.5937, 78.9629], zoom = 5, route = null, children, className = '' }) {
   return (
     <MapContainer
       center={center}
@@ -59,7 +76,7 @@ export default function MapView({ center = [20.5937, 78.9629], zoom = 5, childre
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
       <ZoomControl position="bottomright" />
-      <MapController center={center} zoom={zoom} />
+      <MapController center={center} zoom={zoom} route={route} />
       {children}
     </MapContainer>
   );

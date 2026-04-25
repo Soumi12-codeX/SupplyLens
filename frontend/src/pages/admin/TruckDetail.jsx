@@ -34,12 +34,14 @@ export default function TruckDetail({ truck, alerts = [], onClose }) {
         <div className={`p-4 rounded-xl border ${
           truck.status === 'delayed'
             ? 'border-red-500/20 bg-red-500/5'
-            : 'border-emerald-500/20 bg-emerald-500/5'
+            : progressPercent === 100
+              ? 'border-brand-primary/20 bg-brand-primary/5'
+              : 'border-emerald-500/20 bg-emerald-500/5'
         }`}>
           <div className="flex items-center gap-2 mb-1">
-            <div className={`w-2 h-2 rounded-full ${truck.status === 'delayed' ? 'bg-red-400 animate-pulse' : 'bg-emerald-400'}`}></div>
-            <span className={`text-sm font-medium ${truck.status === 'delayed' ? 'text-red-400' : 'text-emerald-400'}`}>
-              {truck.status === 'delayed' ? 'Delayed' : 'On Route'}
+            <div className={`w-2 h-2 rounded-full ${truck.status === 'delayed' ? 'bg-red-400 animate-pulse' : progressPercent === 100 ? 'bg-brand-primary' : 'bg-emerald-400'}`}></div>
+            <span className={`text-sm font-medium ${truck.status === 'delayed' ? 'text-red-400' : progressPercent === 100 ? 'text-brand-primary' : 'text-emerald-400'}`}>
+              {truck.status === 'delayed' ? 'Delayed' : progressPercent === 100 ? 'Completed' : 'On Route'}
             </span>
           </div>
           <p className="text-slate-400 text-xs">Last updated: just now</p>

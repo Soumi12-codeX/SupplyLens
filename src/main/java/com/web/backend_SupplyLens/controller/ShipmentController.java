@@ -30,10 +30,10 @@ public class ShipmentController {
     private DriverLocationRepository locationRepo;
 
     @PostMapping("/create")
-    public ResponseEntity<?> createShipment(@RequestBody Shipment shipment, @RequestParam Long warehouseId) {
+    public ResponseEntity<?> createShipment(@RequestBody Shipment shipment, @RequestParam Long warehouseId, @RequestParam Long adminId) {
         try {
-            System.out.println(">>> CONTROLLER: Creating shipment for warehouse " + warehouseId);
-            return ResponseEntity.ok(shipmentService.creatAndAssign(shipment, warehouseId));
+            System.out.println(">>> CONTROLLER: Creating shipment for warehouse " + warehouseId + " by admin " + adminId);
+            return ResponseEntity.ok(shipmentService.creatAndAssign(shipment, warehouseId, adminId));
         } catch (Exception e) {
             System.err.println(">>> CONTROLLER ERROR: Failed to create shipment!");
             e.printStackTrace();

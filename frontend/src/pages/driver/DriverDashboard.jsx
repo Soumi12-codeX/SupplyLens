@@ -7,9 +7,10 @@ import DriverMessages from './DriverMessages';
 import AINotification from '../../components/AINotification';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
-import { 
-  Navigation, MapPin, Clock, Gauge, Package, 
-  ChevronUp, ChevronDown, MessageSquare, Loader2, Play, CheckCircle2 
+import { CircleMarker, Tooltip } from 'react-leaflet';
+import {
+  Navigation, MapPin, Clock, Gauge, Package,
+  ChevronUp, ChevronDown, MessageSquare, Loader2, Play, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 
 export default function DriverDashboard() {
@@ -22,6 +23,7 @@ export default function DriverDashboard() {
   const [loading, setLoading] = useState(true);
   const [bottomPanelExpanded, setBottomPanelExpanded] = useState(true);
   const [startingTrip, setStartingTrip] = useState(false);
+  const [acknowledgedRouteOptionId, setAcknowledgedRouteOptionId] = useState(null);
 
   // 1. Fetch data initially and Poll for new assignments
   const fetchData = async () => {
@@ -32,7 +34,7 @@ export default function DriverDashboard() {
 
       const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
       const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
-      
+
       setActiveShipment(current);
 
       if (!current || current.assignmentStatus === 'ASSIGNED') {
@@ -40,13 +42,21 @@ export default function DriverDashboard() {
           id: `TRK-${user.driverId}`,
           currentPosition: { lat: loc.latitude, lng: loc.longitude },
           status: current ? 'assigned' : 'idle',
-          // Show route even if just assigned
           route: (() => {
             try {
-              return current?.currentPath ? JSON.parse(current.currentPath) : null;
+              let jsonStr = current?.currentPath;
+              const origin = { lat: current?.warehouse?.latitude || 20.5937, lng: current?.warehouse?.longitude || 78.9629 };
+              const dest = { lat: current?.route?.destination?.latitude || origin.lat, lng: current?.route?.destination?.longitude || origin.lng };
+
+              if (!jsonStr || jsonStr === "[]") return [origin, dest];
+              jsonStr = jsonStr.replace(/,\s*]/g, ']');
+              const parsed = JSON.parse(jsonStr);
+              return (parsed && parsed.length > 0) ? parsed : [origin, dest];
             } catch (e) {
               console.error("Failed to parse currentPath", e);
-              return null;
+              const origin = { lat: current?.warehouse?.latitude || 20.5937, lng: current?.warehouse?.longitude || 78.9629 };
+              const dest = { lat: current?.route?.destination?.latitude || origin.lat, lng: current?.route?.destination?.longitude || origin.lng };
+              return [origin, dest];
             }
           })(),
           originName: current?.warehouse?.name || "Base",
@@ -59,25 +69,56 @@ export default function DriverDashboard() {
         };
         setTruck(staticTruck);
       } else if (current.assignmentStatus === 'IN_PROGRESS') {
+        const parsedRoute = (() => {
+          try {
+            let jsonStr = current?.currentPath;
+            if (!jsonStr) return [];
+            jsonStr = jsonStr.replace(/,\s*]/g, ']');
+            return JSON.parse(jsonStr);
+          } catch (e) {
+            console.error("Failed to parse currentPath", e);
+            return [];
+          }
+        })();
+
+        // Dynamic progress: find nearest point on route to current position
+        let progressFraction = 0;
+        let closestIdx = 0;
+        if (parsedRoute.length >= 2) {
+          let minDist = Infinity;
+          for (let i = 0; i < parsedRoute.length; i++) {
+            const dx = parsedRoute[i].lat - loc.latitude;
+            const dy = parsedRoute[i].lng - loc.longitude;
+            const d = dx * dx + dy * dy;
+            if (d < minDist) { minDist = d; closestIdx = i; }
+          }
+          progressFraction = (parsedRoute.length > 1) ? closestIdx / (parsedRoute.length - 1) : 0;
+        }
+
+        // Dynamic km remaining: haversine from truck to destination
+        const destPt = parsedRoute.length > 0 ? parsedRoute[parsedRoute.length - 1] : null;
+        let kmRemaining = 'Calculating...';
+        if (destPt) {
+          const R = 6371;
+          const dLat = (destPt.lat - loc.latitude) * Math.PI / 180;
+          const dLng = (destPt.lng - loc.longitude) * Math.PI / 180;
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(loc.latitude * Math.PI / 180) * Math.cos(destPt.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+          kmRemaining = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) + ' km left';
+        }
+
         const activeTruck = {
           id: `TRK-${user.driverId}`,
           currentPosition: { lat: loc.latitude, lng: loc.longitude },
           status: 'on-route',
-          route: (() => {
-            try {
-              return JSON.parse(current.currentPath || '[]');
-            } catch (e) {
-              console.error("Failed to parse currentPath", e);
-              return [];
-            }
-          })(),
+          route: parsedRoute,
           originName: current.warehouse?.name,
           destinationName: current.route?.destination?.name || "N/A",
           cargo: current.notes,
-          progress: 0.35, 
+          progress: progressFraction,
+          progressIndex: closestIdx,
           speed: 65,
           eta: current.route?.estimatedTime || "4h",
-          distanceRemaining: "120 km"
+          distanceRemaining: kmRemaining
         };
         setTruck(activeTruck);
       }
@@ -90,53 +131,24 @@ export default function DriverDashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    const interval = setInterval(fetchData, 3000); // Poll every 3s for smooth tracking
     return () => clearInterval(interval);
   }, [user]);
 
-  // --- Route-Snapped Simulator Engine ---
-  useEffect(() => {
-    if (activeShipment?.assignmentStatus !== 'IN_PROGRESS' || !truck?.route || truck.route.length === 0) return;
+  // Derive whether the reroute popup should show:
+  // Show only when routeStatus is REROUTED AND the driver hasn't acknowledged THIS specific route option yet
+  const showReroutePopup = activeShipment?.routeStatus === 'REROUTED'
+    && activeShipment?.activeRouteOptionId != null
+    && acknowledgedRouteOptionId !== activeShipment?.activeRouteOptionId;
 
-    let currentStep = 0;
-    const simulationInterval = setInterval(async () => {
-      if (currentStep >= truck.route.length) {
-        clearInterval(simulationInterval);
-        return;
-      }
-
-      const nextNode = truck.route[currentStep];
-      
-      // Update local state for immediate feedback
-      setTruck(prev => ({
-        ...prev,
-        currentPosition: { lat: nextNode.lat, lng: nextNode.lng },
-        progress: (currentStep / (truck.route.length - 1)) * 100
-      }));
-
-      // Sync with backend (POST update)
-      try {
-        await api.post('/driver/location', {
-          driverId: user.driverId,
-          latitude: nextNode.lat,
-          longitude: nextNode.lng
-        });
-      } catch (err) {
-        console.warn("Simulation sync delay:", err.message);
-      }
-
-      currentStep++;
-    }, 5000); // Move every 5 seconds along the blue line
-
-    return () => clearInterval(simulationInterval);
-  }, [activeShipment?.assignmentStatus, truck?.route?.length]);
+  // --- Cleanup: Removed frontend simulator to avoid conflict with backend road-aware engine ---
 
   const handleStartTrip = async () => {
     if (!activeShipment) return;
     setStartingTrip(true);
     try {
       await api.post(`/driver/shipments/${activeShipment.id}/start`);
-      await fetchData(); 
+      await fetchData();
     } catch (err) {
       alert("Failed to start trip. Please try again.");
     } finally {
@@ -153,6 +165,20 @@ export default function DriverDashboard() {
       alert("Failed to mark delivered.");
     }
   }
+
+  const handleReroute = async () => {
+    try {
+      const shipmentId = activeShipment.id.toString().replace('SHP-', '');
+      const res = await api.get(`/route/driver-link/${shipmentId}`);
+      if (res.data && res.data.link) {
+        window.open(res.data.link, '_blank');
+        // Mark THIS route option ID as acknowledged so popup won't reappear
+        setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
+      }
+    } catch (err) {
+      console.error("Failed to get reroute link:", err);
+    }
+  };
 
   if (loading || !truck) {
     return (
@@ -176,10 +202,102 @@ export default function DriverDashboard() {
           <MapView
             center={[truck.currentPosition.lat, truck.currentPosition.lng]}
             zoom={isInProgress || isAssigned ? 10 : 13}
+            route={(isAssigned || isInProgress) ? truck.route : null}
           >
-            <TruckMarker truck={truck} isSelected onClick={() => {}} />
+            <TruckMarker truck={truck} isSelected onClick={() => { }} />
             {(isInProgress || isAssigned) && truck.route && (
-              <RouteOverlay route={truck.route} isActive={isInProgress} />
+              <RouteOverlay route={truck.route} isActive={isInProgress} progressIndex={truck.progressIndex || 0} />
+            )}
+
+            {/* Origin & Destination Labels on Map */}
+            {(isInProgress || isAssigned) && truck.route && truck.route.length >= 2 && (
+              <>
+                {/* Origin marker — Green */}
+                <CircleMarker
+                  center={[truck.route[0].lat, truck.route[0].lng]}
+                  radius={8}
+                  pathOptions={{
+                    fillColor: '#22c55e',
+                    fillOpacity: 1,
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 0.9,
+                  }}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -12]}
+                    opacity={1}
+                    permanent={true}
+                    className="origin-destination-label"
+                  >
+                    <div style={{
+                      background: 'rgba(15, 23, 42, 0.95)',
+                      border: '1px solid rgba(34, 197, 94, 0.4)',
+                      borderRadius: '8px',
+                      padding: '4px 10px',
+                      backdropFilter: 'blur(8px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                    }}>
+                      <span style={{
+                        color: '#22c55e',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        letterSpacing: '0.5px',
+                        textTransform: 'uppercase',
+                      }}>⬤ </span>
+                      <span style={{
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                      }}>{truck.originName}</span>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+
+                {/* Destination marker — Red */}
+                <CircleMarker
+                  center={[truck.route[truck.route.length - 1].lat, truck.route[truck.route.length - 1].lng]}
+                  radius={8}
+                  pathOptions={{
+                    fillColor: '#ef4444',
+                    fillOpacity: 1,
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 0.9,
+                  }}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -12]}
+                    opacity={1}
+                    permanent={true}
+                    className="origin-destination-label"
+                  >
+                    <div style={{
+                      background: 'rgba(15, 23, 42, 0.95)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      borderRadius: '8px',
+                      padding: '4px 10px',
+                      backdropFilter: 'blur(8px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                    }}>
+                      <span style={{
+                        color: '#ef4444',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        letterSpacing: '0.5px',
+                        textTransform: 'uppercase',
+                      }}>⬤ </span>
+                      <span style={{
+                        color: '#ffffff',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                      }}>{truck.destinationName}</span>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              </>
             )}
           </MapView>
 
@@ -209,6 +327,26 @@ export default function DriverDashboard() {
                 </button>
               </div>
             )}
+
+            {showReroutePopup && (
+              <div className="fixed inset-0 bg-black/60 z-[2000] flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="bg-slate-900 border border-orange-500/50 rounded-2xl p-6 max-w-sm w-full shadow-[0_0_40px_rgba(249,115,22,0.2)] flex flex-col items-center text-center animate-fade-in-up">
+                  <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center mb-4">
+                    <AlertTriangle className="text-orange-500 w-8 h-8 animate-pulse" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white mb-2">Route Updated</h2>
+                  <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+                    The Command Center has approved a new AI-optimized route due to an obstacle ahead.
+                  </p>
+                  <button
+                    onClick={handleReroute}
+                    className="w-full py-3.5 bg-orange-500 text-white font-bold text-sm rounded-xl hover:bg-orange-600 transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)] hover:shadow-[0_0_25px_rgba(249,115,22,0.5)] transform hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    START NEW ROUTE
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Parallel Assignment Window — Non-blocking, side-aligned */}
@@ -233,8 +371,8 @@ export default function DriverDashboard() {
                         <span className="text-[10px] text-slate-500 uppercase font-bold">Planned Route</span>
                       </div>
                       <p className="text-white text-sm font-semibold leading-relaxed">
-                        {activeShipment.warehouse?.name} 
-                        <span className="mx-2 text-slate-600">→</span> 
+                        {activeShipment.warehouse?.name}
+                        <span className="mx-2 text-slate-600">→</span>
                         {activeShipment.route?.destination?.name || "N/A"}
                       </p>
                     </div>
@@ -258,6 +396,31 @@ export default function DriverDashboard() {
                         {activeShipment.route?.estimatedTime || "Calculating..."}
                       </p>
                     </div>
+
+                    {/* Journey Timeline Preview */}
+                    <div className="p-4 rounded-2xl bg-brand-primary/5 border border-brand-primary/10">
+                      <p className="text-[10px] text-brand-primary font-bold uppercase tracking-wider mb-3">Journey Preview</p>
+                      <div className="space-y-4 relative">
+                        <div className="absolute left-1.5 top-2 bottom-2 w-0.5 bg-slate-800 border-l border-dashed border-slate-700"></div>
+
+                        <div className="flex items-start gap-3 relative">
+                          <div className="w-3 h-3 rounded-full bg-emerald-500 mt-1 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                          <p className="text-xs text-white font-medium">{activeShipment.warehouse?.name}</p>
+                        </div>
+
+                        {truck.route?.length > 2 && (
+                          <div className="flex items-start gap-3 relative">
+                            <div className="w-3 h-3 rounded-full bg-neon-blue mt-1"></div>
+                            <p className="text-[10px] text-slate-400">{truck.route.length - 2} Intermediate Hubs</p>
+                          </div>
+                        )}
+
+                        <div className="flex items-start gap-3 relative">
+                          <div className="w-3 h-3 rounded-full bg-red-500 mt-1 shadow-[0_0_8px_rgba(239,68,68,0.4)]"></div>
+                          <p className="text-xs text-white font-medium">{activeShipment.route?.destination?.name || "Destination"}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <button
@@ -276,7 +439,7 @@ export default function DriverDashboard() {
                     )}
                   </button>
                 </div>
-                
+
                 <div className="p-4 bg-white/5 border-t border-white/5">
                   <p className="text-[10px] text-slate-500 text-center italic">
                     Assigned by Command Center • Real-time tracking enabled
@@ -292,7 +455,7 @@ export default function DriverDashboard() {
               <DriverMessages
                 messages={messages}
                 onClose={() => setShowMessages(false)}
-                onAccept={(msgId) => {}}
+                onAccept={(msgId) => { }}
               />
             </div>
           )}
@@ -300,9 +463,8 @@ export default function DriverDashboard() {
 
         {/* Bottom Trip Panel */}
         {isInProgress && (
-          <div className={`border-t border-white/10 bg-slate-950/95 backdrop-blur-md transition-all duration-300 shrink-0 ${
-            bottomPanelExpanded ? 'h-56 md:h-52' : 'h-14'
-          }`}>
+          <div className={`border-t border-white/10 bg-slate-950/95 backdrop-blur-md transition-all duration-300 shrink-0 ${bottomPanelExpanded ? 'h-56 md:h-52' : 'h-14'
+            }`}>
             <button
               onClick={() => setBottomPanelExpanded(!bottomPanelExpanded)}
               className="w-full flex items-center justify-center py-1 text-slate-500 hover:text-white transition-colors"
@@ -323,7 +485,7 @@ export default function DriverDashboard() {
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-emerald-400 text-xs font-medium">{truck.originName}</span>
-                    <span className="text-xs text-slate-500">{progressPercent}% complete</span>
+                    <span className="text-xs text-slate-500 font-medium">{truck.distanceRemaining}</span>
                     <span className="text-red-400 text-xs font-medium">{truck.destinationName}</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
@@ -351,8 +513,8 @@ export default function DriverDashboard() {
                       </div>
                     </div>
                   </div>
-                  
-                  <button 
+
+                  <button
                     onClick={handleMarkDelivered}
                     className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-2"
                   >

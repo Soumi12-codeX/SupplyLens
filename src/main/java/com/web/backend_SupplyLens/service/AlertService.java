@@ -13,6 +13,7 @@ import com.web.backend_SupplyLens.model.AlertStatus;
 import com.web.backend_SupplyLens.model.RouteOption;
 import com.web.backend_SupplyLens.model.RouteOptionStatus;
 import com.web.backend_SupplyLens.model.Shipment;
+import com.web.backend_SupplyLens.model.TransitNode;
 import com.web.backend_SupplyLens.model.Warehouse;
 import com.web.backend_SupplyLens.repository.AlertRepository;
 import com.web.backend_SupplyLens.repository.RouteOptionRepo;
@@ -40,6 +41,9 @@ public class AlertService {
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private CoordinateService coordinateService;
 
 
     @Transactional
@@ -89,19 +93,25 @@ public class AlertService {
             requestBody.put("blockedNode", alert.getNodeName());
             requestBody.put("shipmentId", sample.getId());
 
-            // Clean names to match TransitNode names (removing Hub/Warehouse)
-            String src = sample.getWarehouse().getName().toLowerCase()
-                    .replaceAll(" hub| warehouse| logistics| port| tech", "").trim();
-            String dest = sample.getRoute().getDestination().getName().toLowerCase()
-                    .replaceAll(" hub| warehouse| logistics| port| tech", "").trim();
+            // Clean names to match TransitNode names
+            String src = sample.getWarehouse().getCity().toLowerCase().trim();
+            String dest = sample.getRoute().getDestination().getCity().toLowerCase().trim();
 
             requestBody.put("source", src);
             requestBody.put("destination", dest);
+            requestBody.put("sourceLat", sample.getWarehouse().getLatitude());
+            requestBody.put("sourceLng", sample.getWarehouse().getLongitude());
+            requestBody.put("destLat", sample.getRoute().getDestination().getLatitude());
+            requestBody.put("destLng", sample.getRoute().getDestination().getLongitude());
 
             System.out.println("Calling Python AI: " + src + " -> " + dest + " (Avoiding " + alert.getNodeName() + ")");
+            System.out.println("AI Request Body: " + requestBody);
 
             ResponseEntity<java.util.Map> response = restTemplate.postForEntity(pythonUrl, requestBody,
                     java.util.Map.class);
+            
+            System.out.println("AI Response Status: " + response.getStatusCode());
+            System.out.println("AI Response Body: " + response.getBody());
 
             // Replace the previous response handling with this more robust version:
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -180,13 +190,23 @@ public class AlertService {
         RouteOption selected = routeOptionRepo.findById(selectedRouteId).orElseThrow();
 
         for (String idStr : alert.getAffectedShipmentIds().split(",")) {
-            Long shipmentId = Long.parseLong(idStr.trim());
-            shipmentRepo.findById(shipmentId).ifPresent(shipment -> {
-                shipment.setCurrentPath(selected.getPath());
-                shipment.setRouteStatus("REROUTED");
-                shipment.setActiveRouteOptionId(selectedRouteId);
-                shipmentRepo.save(shipment);
-            });
+            String trimmed = idStr.trim();
+            if (trimmed.isEmpty()) continue;
+            try {
+                Long shipmentId = Long.parseLong(trimmed);
+                shipmentRepo.findById(shipmentId).ifPresent(shipment -> {
+                    // Generate coordinate JSON from the path text to keep progress simulation working
+                    String pathText = selected.getPath();
+                    String jsonPath = generateCoordinateJson(pathText);
+                    
+                    shipment.setCurrentPath(jsonPath);
+                    shipment.setRouteStatus("REROUTED");
+                    shipment.setActiveRouteOptionId(selectedRouteId);
+                    shipmentRepo.save(shipment);
+                });
+            } catch (NumberFormatException e) {
+                System.err.println("Failed to parse shipment ID: " + trimmed);
+            }
         }
     }
 
@@ -194,5 +214,58 @@ public class AlertService {
         Alert alert = alertRepo.findById(id).orElseThrow();
         alert.setStatus(AlertStatus.DISMISSED);
         alertRepo.save(alert);
+    }
+
+    private String generateCoordinateJson(String pathText) {
+        String[] cities = pathText.split(" -> ");
+        java.util.List<TransitNode> hubs = new java.util.ArrayList<>();
+        
+        for (String city : cities) {
+            TransitNode node = coordinateService.getCoordinates(city.trim());
+            if (node != null) {
+                hubs.add(node);
+            }
+        }
+
+        // Try OSRM for high-fidelity road-snapped path (same as ShipmentService)
+        if (hubs.size() >= 2) {
+            try {
+                String coordsStr = hubs.stream()
+                    .map(h -> h.getLongitude() + "," + h.getLatitude())
+                    .collect(java.util.stream.Collectors.joining(";"));
+
+                String osrmUrl = "https://router.project-osrm.org/route/v1/driving/" + coordsStr + "?overview=full&geometries=geojson";
+                ResponseEntity<java.util.Map> osrmRes = restTemplate.getForEntity(osrmUrl, java.util.Map.class);
+
+                if (osrmRes.getStatusCode().is2xxSuccessful() && osrmRes.getBody() != null) {
+                    java.util.Map<String, Object> body = osrmRes.getBody();
+                    if ("Ok".equals(body.get("code"))) {
+                        java.util.List<java.util.Map<String, Object>> routes = (java.util.List<java.util.Map<String, Object>>) body.get("routes");
+                        if (!routes.isEmpty()) {
+                            java.util.Map<String, Object> geometry = (java.util.Map<String, Object>) routes.get(0).get("geometry");
+                            java.util.List<java.util.List<Double>> coords = (java.util.List<java.util.List<Double>>) geometry.get("coordinates");
+
+                            java.util.List<String> jsonCoords = coords.stream()
+                                .map(c -> String.format("{\"lat\": %f, \"lng\": %f}", c.get(1), c.get(0)))
+                                .collect(java.util.stream.Collectors.toList());
+
+                            System.out.println(">>> REROUTE: Generated OSRM road path with " + coords.size() + " points");
+                            return "[" + String.join(",", jsonCoords) + "]";
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println(">>> REROUTE: OSRM fetch failed, falling back to hub coords: " + e.getMessage());
+            }
+        }
+        
+        // Fallback: hub-level coordinates only
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < hubs.size(); i++) {
+            sb.append("{\"lat\":").append(hubs.get(i).getLatitude()).append(",\"lng\":").append(hubs.get(i).getLongitude()).append("}");
+            if (i < hubs.size() - 1) sb.append(",");
+        }
+        sb.append("]");
+        return sb.toString();
     }
 }

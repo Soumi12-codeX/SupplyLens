@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle, X, ArrowRight } from 'lucide-react';
 
 export default function AINotification({ alert, onApprove, onDismiss, isDriver = false }) {
+  const [status, setStatus] = React.useState('pending'); // 'pending' | 'approved'
   if (!alert) return null;
 
   const severityColors = {
@@ -75,11 +76,29 @@ export default function AINotification({ alert, onApprove, onDismiss, isDriver =
         {/* Actions */}
         <div className="flex gap-3">
           <button
-            onClick={() => onApprove?.(alert)}
-            className="flex-1 py-2.5 rounded-lg bg-neon-blue/15 text-neon-blue border border-neon-blue/25 text-sm font-medium hover:bg-neon-blue/25 transition-all flex items-center justify-center gap-2"
+            onClick={async () => {
+              if (status === 'approved') return;
+              await onApprove?.(alert);
+              setStatus('approved');
+            }}
+            disabled={status === 'approved'}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+              status === 'approved' 
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default'
+                : 'bg-neon-blue/15 text-neon-blue border border-neon-blue/25 hover:bg-neon-blue/25'
+            }`}
           >
-            {isDriver ? 'Accept Route' : 'Approve Change'}
-            <ArrowRight size={14} />
+            {status === 'approved' ? (
+              <>
+                <CheckCircle size={14} />
+                Message sent to driver
+              </>
+            ) : (
+              <>
+                {isDriver ? 'Accept Route' : 'Approve Change'}
+                <ArrowRight size={14} />
+              </>
+            )}
           </button>
           <button
             onClick={onDismiss}

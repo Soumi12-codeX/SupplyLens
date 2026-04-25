@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 
-export default function RouteOverlay({ route, isActive = false }) {
+export default function RouteOverlay({ route, isActive = false, progressIndex = 0 }) {
   const [roadPath, setRoadPath] = useState(null);
 
   useEffect(() => {
@@ -11,7 +11,13 @@ export default function RouteOverlay({ route, isActive = false }) {
     const fetchRoadPath = async () => {
       try {
         // OSRM expects longitude,latitude pairs separated by semi-colons
-        const coordsStr = route.map(p => `${p.lng},${p.lat}`).join(';');
+        // For large routes, sample every Nth point to keep URL manageable
+        let sampledRoute = route;
+        if (route.length > 100) {
+          const step = Math.max(1, Math.floor(route.length / 80));
+          sampledRoute = route.filter((_, i) => i % step === 0 || i === route.length - 1);
+        }
+        const coordsStr = sampledRoute.map(p => `${p.lng},${p.lat}`).join(';');
         const res = await fetch(
           `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`
         );
@@ -36,38 +42,64 @@ export default function RouteOverlay({ route, isActive = false }) {
     fetchRoadPath();
 
     return () => { isMounted = false; };
-  }, [route]);
+  }, [route?.length]);
 
   if (!route || route.length < 2) return null;
 
   const positions = roadPath || route.map((p) => [p.lat, p.lng]);
 
+  // Split the path into covered and remaining segments
+  const splitRatio = route.length > 0 ? progressIndex / (route.length - 1) : 0;
+  const splitIdx = Math.max(0, Math.min(positions.length - 1, Math.round(splitRatio * (positions.length - 1))));
+  
+  const coveredPath = positions.slice(0, splitIdx + 1);
+  const remainingPath = positions.slice(splitIdx);
+
   return (
     <>
-      {/* Glow layer */}
+      {/* Covered path — grey/dim */}
+      {isActive && coveredPath.length >= 2 && (
+        <Polyline
+          positions={coveredPath}
+          pathOptions={{
+            color: '#475569',
+            weight: 4,
+            opacity: 0.6,
+            lineCap: 'round',
+            lineJoin: 'round'
+          }}
+        />
+      )}
+
+      {/* Glow layer for remaining — Only show when active */}
+      {isActive && remainingPath.length >= 2 && (
+        <Polyline
+          positions={remainingPath}
+          pathOptions={{
+            color: '#00f0ff',
+            weight: 6,
+            opacity: 0.15,
+            lineCap: 'round',
+          }}
+        />
+      )}
+      
+      {/* Main line — remaining (bright) or full preview (dotted) */}
       <Polyline
-        positions={positions}
+        positions={isActive ? (remainingPath.length >= 2 ? remainingPath : positions) : positions}
         pathOptions={{
           color: isActive ? '#00f0ff' : '#3b82f6',
-          weight: isActive ? 6 : 4,
-          opacity: 0.15,
-          lineCap: 'round',
-        }}
-      />
-      {/* Main line */}
-      <Polyline
-        positions={positions}
-        pathOptions={{
-          color: isActive ? '#00f0ff' : '#3b82f6',
-          weight: isActive ? 3 : 2,
-          opacity: isActive ? 0.8 : 0.4,
-          dashArray: isActive ? null : '8 12',
-          lineCap: 'round',
+          weight: isActive ? 4 : 3,
+          opacity: isActive ? 0.8 : 0.7,
+          dashArray: isActive ? null : '10, 15',
+          lineCap: isActive ? 'round' : 'square',
+          lineJoin: 'round'
         }}
       />
       
-      {/* Render all intermediate nodes + start and end with different styles */}
-      {route.map((p, idx) => {
+      
+      {/* Only render node markers for hub-based routes (< 50 nodes), not OSRM high-fidelity paths */}
+      {route.length < 50 && route.map((p, idx) => {
         const isStart = idx === 0;
         const isEnd = idx === route.length - 1;
         const pos = [p.lat, p.lng];

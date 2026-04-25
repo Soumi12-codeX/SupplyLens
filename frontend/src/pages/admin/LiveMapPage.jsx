@@ -35,8 +35,8 @@ export default function LiveMapPage() {
       const isUnassigned = s.assignmentStatus === "UNASSIGNED";
       const isStarted = s.assignmentStatus === "IN_PROGRESS" || s.assignmentStatus === "ASSIGNED";
       
-      // Stagger base progress so they don't perfectly stack on the route line
-      const baseProgress = s.assignmentStatus === "DELIVERED" ? 1 : 0.02 + ((s.id % 20) * 0.04);
+      // Start trucks at a lower progress point (max 10%) to prevent them from finishing too fast on refresh
+      const baseProgress = s.assignmentStatus === "DELIVERED" ? 1 : 0.01 + ((s.id % 10) * 0.01);
       const progress = isStarted ? baseProgress : 0;
 
       let status = "delayed";
@@ -65,7 +65,19 @@ export default function LiveMapPage() {
           lat: origin.lat + (dest.lat - origin.lat) * progress + jitterLat,
           lng: origin.lng + (dest.lng - origin.lng) * progress + jitterLng,
         },
-        route: [] 
+        route: (() => {
+          try {
+            let jsonStr = s.currentPath;
+            if (!jsonStr || jsonStr === "[]") return [origin, dest];
+            // Clean up trailing commas
+            jsonStr = jsonStr.replace(/,\s*]/g, ']');
+            const parsed = JSON.parse(jsonStr);
+            return (parsed && parsed.length > 0) ? parsed : [origin, dest];
+          } catch (e) {
+            console.error("Failed to parse currentPath for truck", s.id, e);
+            return [origin, dest];
+          }
+        })()
       };
     });
   }, []);
@@ -92,7 +104,7 @@ export default function LiveMapPage() {
     const simInterval = setInterval(() => {
       setFleet(prevFleet => prevFleet.map(truck => {
         if (truck.status === 'on-route' && truck.progress < 1) {
-          const newProgress = Math.min(1, truck.progress + 0.001);
+          const newProgress = Math.min(1, truck.progress + 0.0002);
           // Interpolate position
           const lat = truck.originPosition.lat + (truck.destinationPosition.lat - truck.originPosition.lat) * newProgress;
           const lng = truck.originPosition.lng + (truck.destinationPosition.lng - truck.originPosition.lng) * newProgress;
@@ -112,6 +124,8 @@ export default function LiveMapPage() {
       console.log('[LiveMap] Received real-time alert:', alert);
       setAlerts((prev) => [{
         ...alert,
+        truckId: alert.affectedShipmentIds ? `SHP-${alert.affectedShipmentIds.split(',')[0]}` : 'Unknown',
+        driverName: "Affected Driver",
         icon: alert.alertType === 'LABOR_STRIKE' ? '🏥' : '🚧',
         title: alert.alertType,
         description: alert.messsage,
@@ -133,9 +147,35 @@ export default function LiveMapPage() {
     setMapZoom(10);
   }, []);
 
-  const handleApproveAlert = (alert) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-    setRoadConditions((prev) => prev.filter((c) => c.alertId !== alert.id));
+  const handleApproveAlert = async (alert) => {
+    try {
+      const bestOption = alert.routeOptions?.[0];
+      if (!bestOption) {
+        alert("No AI suggested route found for this alert.");
+        return;
+      }
+
+      const shipmentIdStr = alert.truckId ? alert.truckId.replace('SHP-', '') : '';
+      if (!shipmentIdStr || isNaN(shipmentIdStr)) {
+        console.error("Invalid shipment ID:", shipmentIdStr);
+        return;
+      }
+
+      const shipRes = await api.get(`/admin/shipments`);
+      const shipment = shipRes.data.find(s => s.id.toString() === shipmentIdStr);
+      
+      const sourceWhId = shipment?.warehouse?.id || 1;
+      const destWhId = shipment?.route?.destination?.id || 2;
+
+      await api.post(`/alerts/${alert.id}/select-route/${bestOption.id}?sourceWhId=${sourceWhId}&destWhId=${destWhId}`);
+      
+      setTimeout(() => {
+        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+        setRoadConditions((prev) => prev.filter((c) => c.alertId !== alert.id));
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to approve alert:", err);
+    }
   };
 
   const handleDismissAlert = (alertId) => {
