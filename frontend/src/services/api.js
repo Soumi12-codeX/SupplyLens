@@ -19,9 +19,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.warn("Session expired or unauthorized. Logging out...");
-      localStorage.clear();
-      if (window.location.pathname !== '/login') {
+      const path = window.location.pathname;
+      // Don't redirect on public pages (register, login, home)
+      if (path !== '/login' && path !== '/register' && path !== '/') {
+        console.warn("Session expired or unauthorized. Logging out...");
+        localStorage.clear();
         window.location.href = '/login';
       }
     }
