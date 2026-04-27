@@ -1,114 +1,286 @@
 import React, { useState, useEffect } from 'react';
+
 import Sidebar from '../../components/Sidebar';
+
 import MapView from '../../components/Map/MapView';
+
 import TruckMarker from '../../components/Map/TruckMarker';
+
 import RouteOverlay from '../../components/Map/RouteOverlay';
+
 import DriverMessages from './DriverMessages';
+
 import AINotification from '../../components/AINotification';
+
 import { useAuth } from '../../context/AuthContext';
+
 import api from '../../services/api';
-import wsService from '../../services/websocket'; // Ensure this path is correct
+
 import { CircleMarker, Tooltip } from 'react-leaflet';
+
 import {
+
   Navigation, MapPin, Clock, Gauge, Package,
+
   ChevronUp, ChevronDown, MessageSquare, Loader2, Play, CheckCircle2, AlertTriangle
+
 } from 'lucide-react';
 
+
+
 export default function DriverDashboard() {
+
   const { user } = useAuth();
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [truck, setTruck] = useState(null);
+
+  const [truck, setTruck] = useState(null); // This stores the current visual state (simulated or real)
+
   const [activeShipment, setActiveShipment] = useState(null);
+
   const [showMessages, setShowMessages] = useState(false);
+
+  const [messages, setMessages] = useState([]);
+
   const [loading, setLoading] = useState(true);
+
   const [bottomPanelExpanded, setBottomPanelExpanded] = useState(true);
+
   const [startingTrip, setStartingTrip] = useState(false);
+
   const [acknowledgedRouteOptionId, setAcknowledgedRouteOptionId] = useState(null);
+
   const [activeRouteOption, setActiveRouteOption] = useState(null);
 
+
+
+  // 1. Fetch data initially and Poll for new assignments
+
   const fetchData = async () => {
-  if (!user?.driverId) {
-    console.warn("No driverId found on user:", user);
-    setLoading(false);
-    return;
-  }
-  try {
-    const locRes = await api.get(`/driver/location/${user.driverId}`);
-    const loc = locRes.data || { latitude: 20.5937, longitude: 78.9629 };
 
-    const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
-    const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
+    if (!user?.driverId) return;
 
-    setActiveShipment(current);
+    try {
 
-    // ── Build truck object from real data ──────────────────────────
-    let routeCoords = [];
-    if (current?.currentPath) {
-      try {
-        routeCoords = JSON.parse(current.currentPath);
-      } catch {
-        routeCoords = [];
+      const locRes = await api.get(`/driver/location/${user.driverId}`);
+
+      const loc = locRes.data || { latitude: 20.5937, longitude: 78.9629 };
+
+
+
+      const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
+
+      const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
+
+
+
+      setActiveShipment(current);
+
+
+
+      if (!current || current.assignmentStatus === 'ASSIGNED') {
+
+        const staticTruck = {
+
+          id: `TRK-${user.driverId}`,
+
+          currentPosition: { lat: loc.latitude, lng: loc.longitude },
+
+          status: current ? 'assigned' : 'idle',
+
+          route: (() => {
+
+            try {
+
+              let jsonStr = current?.currentPath;
+
+              const origin = { lat: current?.warehouse?.latitude || 20.5937, lng: current?.warehouse?.longitude || 78.9629 };
+
+              const dest = { lat: current?.route?.destination?.latitude || origin.lat, lng: current?.route?.destination?.longitude || origin.lng };
+
+
+
+              if (!jsonStr || jsonStr === "[]") return [origin, dest];
+
+              jsonStr = jsonStr.replace(/,\s*]/g, ']');
+
+              const parsed = JSON.parse(jsonStr);
+
+              return (parsed && parsed.length > 0) ? parsed : [origin, dest];
+
+            } catch (e) {
+
+              console.error("Failed to parse currentPath", e);
+
+              const origin = { lat: current?.warehouse?.latitude || 20.5937, lng: current?.warehouse?.longitude || 78.9629 };
+
+              const dest = { lat: current?.route?.destination?.latitude || origin.lat, lng: current?.route?.destination?.longitude || origin.lng };
+
+              return [origin, dest];
+
+            }
+
+          })(),
+
+          originName: current?.warehouse?.name || "Base",
+
+          destinationName: current?.route?.destination?.name || "N/A",
+
+          cargo: current?.notes || "No cargo",
+
+          progress: 0,
+
+          speed: 0,
+
+          eta: current?.route?.estimatedTime || "N/A",
+
+          distanceRemaining: "Calculating..."
+
+        };
+
+        setTruck(staticTruck);
+
+      } else if (current.assignmentStatus === 'IN_PROGRESS') {
+
+        const parsedRoute = (() => {
+
+          try {
+
+            let jsonStr = current?.currentPath;
+
+            if (!jsonStr) return [];
+
+            jsonStr = jsonStr.replace(/,\s*]/g, ']');
+
+            return JSON.parse(jsonStr);
+
+          } catch (e) {
+
+            console.error("Failed to parse currentPath", e);
+
+            return [];
+
+          }
+
+        })();
+
+
+
+        // Dynamic progress: find nearest point on route to current position
+
+        let progressFraction = 0;
+
+        let closestIdx = 0;
+
+        if (parsedRoute.length >= 2) {
+
+          let minDist = Infinity;
+
+          for (let i = 0; i < parsedRoute.length; i++) {
+
+            const dx = parsedRoute[i].lat - loc.latitude;
+
+            const dy = parsedRoute[i].lng - loc.longitude;
+
+            const d = dx * dx + dy * dy;
+
+            if (d < minDist) { minDist = d; closestIdx = i; }
+
+          }
+
+          progressFraction = (parsedRoute.length > 1) ? closestIdx / (parsedRoute.length - 1) : 0;
+
+        }
+
+
+
+        // Dynamic km remaining: haversine from truck to destination
+
+        const destPt = parsedRoute.length > 0 ? parsedRoute[parsedRoute.length - 1] : null;
+
+        let kmRemaining = 'Calculating...';
+
+        if (destPt) {
+
+          const R = 6371;
+
+          const dLat = (destPt.lat - loc.latitude) * Math.PI / 180;
+
+          const dLng = (destPt.lng - loc.longitude) * Math.PI / 180;
+
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(loc.latitude * Math.PI / 180) * Math.cos(destPt.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+
+          kmRemaining = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) + ' km left';
+
+        }
+
+
+
+        const activeTruck = {
+
+          id: `TRK-${user.driverId}`,
+
+          currentPosition: { lat: loc.latitude, lng: loc.longitude },
+
+          status: 'on-route',
+
+          route: parsedRoute,
+
+          originName: current.warehouse?.name,
+
+          destinationName: current.route?.destination?.name || "N/A",
+
+          cargo: current.notes,
+
+          progress: progressFraction,
+
+          progressIndex: closestIdx,
+
+          speed: 65,
+
+          eta: current.route?.estimatedTime || "4h",
+
+          distanceRemaining: kmRemaining
+
+        };
+
+        setTruck(activeTruck);
+
       }
+
+      setLoading(false);
+
+    } catch (err) {
+
+      console.error("Failed to fetch driver data:", err);
+
+      setLoading(false);
+
     }
 
-    setTruck({
-      id: user.driverId,
-      currentPosition: { lat: loc.latitude, lng: loc.longitude },
-      route: routeCoords,
-      progressIndex: 0,
-      progress: 0,
-      originName: current?.warehouse?.name || "Origin",
-      destinationName: current?.route?.destination?.name || "Destination",
-      cargo: current?.notes || "Cargo",
-      eta: current?.route?.estimatedTime || "N/A",
-      speed: 60,
-      distanceRemaining: "Calculating...",
-    });
+  };
 
-    setLoading(false);
-  } catch (err) {
-    console.error("Fetch failed", err);
-    // ── Set a fallback truck so UI doesn't hang on loader ──────────
-    setTruck({
-      id: user.driverId || "unknown",
-      currentPosition: { lat: 20.5937, lng: 78.9629 },
-      route: [],
-      progressIndex: 0,
-      progress: 0,
-      originName: "Pending",
-      destinationName: "Pending",
-      cargo: "",
-      eta: "N/A",
-      speed: 0,
-      distanceRemaining: "N/A",
-    });
-    setLoading(false);
-  }
-};
+
 
   useEffect(() => {
-  if (!user?.driverId) return;
-  
-  // Poll driver location every 3 seconds to reflect simulator updates
-  const interval = setInterval(async () => {
-    try {
-      const res = await api.get(`/driver/location/${user.driverId}`);
-      setTruck(prev => prev ? {
-        ...prev,
-        currentPosition: { lat: res.data.latitude, lng: res.data.longitude }
-      } : prev);
-    } catch (err) {
-      // silent fail — don't crash the dashboard on a poll failure
-    }
-  }, 3000);
 
-  return () => clearInterval(interval);
-}, [user?.driverId]);
+    fetchData();
 
-  // Derived logic with Type Safety
+    const interval = setInterval(fetchData, 3000); // Poll every 3s for smooth tracking
+
+    return () => clearInterval(interval);
+
+  }, [user]);
+
+
+
+  // Derive whether the reroute popup should show:
+
   const showReroutePopup = activeShipment?.routeStatus === 'REROUTED'
+
     && activeShipment?.activeRouteOptionId != null
-    && String(acknowledgedRouteOptionId) !== String(activeShipment?.activeRouteOptionId);
+
+    && acknowledgedRouteOptionId !== activeShipment?.activeRouteOptionId;
 
 
 
@@ -122,12 +294,8 @@ export default function DriverDashboard() {
 
         try {
 
-          const res = await api.get(`/driver/my-route-link`);
-          // token is sent automatically via api interceptor
-          if (res.data?.googleMapsLink) {
-            window.open(res.data.googleMapsLink, '_blank');
-            setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
-          }
+          const res = await api.get(`/alerts/route-option/${activeShipment.activeRouteOptionId}`);
+
           setActiveRouteOption(res.data);
 
         } catch (err) {
@@ -197,17 +365,30 @@ export default function DriverDashboard() {
 
 
   const handleReroute = async () => {
-  try {
-    // Use the secure driver endpoint instead
-    const res = await api.get(`/driver/my-route-link`);
-    if (res.data?.googleMapsLink) {
-      window.open(res.data.googleMapsLink, '_blank');
-      setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
+
+    try {
+
+      const shipmentId = activeShipment.id.toString().replace('SHP-', '');
+
+      const res = await api.get(`/route/driver-link/${shipmentId}`);
+
+      if (res.data && res.data.link) {
+
+        window.open(res.data.link, '_blank');
+
+        // Mark THIS route option ID as acknowledged so popup won't reappear
+
+        setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
+
+      }
+
+    } catch (err) {
+
+      console.error("Failed to get reroute link:", err);
+
     }
-  } catch (err) {
-    console.error("Failed to get reroute link:", err);
-  }
-};
+
+  };
 
   if (loading || !truck) {
     return (
@@ -220,17 +401,6 @@ export default function DriverDashboard() {
   const isAssigned = activeShipment?.assignmentStatus === 'ASSIGNED';
   const isInProgress = activeShipment?.assignmentStatus === 'IN_PROGRESS';
   const progressPercent = Math.round((truck.progress || 0) * 100);
-
-  if (!truck) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-brand-dark space-y-4">
-        <Loader2 className="animate-spin text-neon-blue w-12 h-12" />
-        <p className="text-slate-400 font-bold tracking-widest animate-pulse">
-          INITIALIZING SYSTEMS...
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="h-screen flex bg-brand-dark overflow-hidden">
