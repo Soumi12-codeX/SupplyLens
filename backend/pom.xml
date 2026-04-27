@@ -19,7 +19,7 @@
     <description>Supply Chain Backend with Spring Boot + JWT</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>19</java.version>
     </properties>
 
     <dependencies>
@@ -46,6 +46,13 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- 🛢️ H2 In-Memory Database for Local Dev -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
 

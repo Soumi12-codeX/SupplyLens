@@ -82,5 +82,5 @@ supply_chain_db_backup.sql
 boot_run_output.txt
 run_log.txt
 run_log_final.txt
-tmp_shipments.json
 ai_debug.log
+db-backup/

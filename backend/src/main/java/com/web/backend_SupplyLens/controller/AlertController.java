@@ -90,6 +90,13 @@ public class AlertController {
         return alertService.getAllAlerts();
     }
 
+    @GetMapping("/route-option/{id}")
+    public ResponseEntity<RouteOption> getRouteOption(@PathVariable Long id) {
+        return routeOptionRepo.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/{id}/dismiss")
     public ResponseEntity<?> dismiss(@PathVariable Long id) {
         alertService.dismiss(id);
