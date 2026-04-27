@@ -85,7 +85,7 @@ public class AlertService {
 
     private void triggerOptimization(Alert alert, List<Shipment> shipments) {
         try {
-            String pythonUrl = "http://localhost:5000/ai/optimize-route";
+            String pythonUrl = "https://supplylens-1.onrender.com/ai/optimize-route";
             Shipment sample = shipments.get(0);
 
             java.util.Map<String, Object> requestBody = new java.util.HashMap<>();

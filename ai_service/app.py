@@ -18,8 +18,8 @@ logging.basicConfig(filename='ai_debug.log', level=logging.INFO,
 # --- CONFIGURATION ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
-JAVA_ALERT_URL = "http://localhost:8080/api/alerts/from-python"
-JAVA_NODES_URL = "http://localhost:8080/api/route/all-nodes" 
+JAVA_ALERT_URL = "https://supplylens-4n7e.onrender.com/api/alerts/from-python"
+JAVA_NODES_URL = "https://supplylens-4n7e.onrender.com/api/route/all-nodes" 
 
 genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-1.5-flash')
