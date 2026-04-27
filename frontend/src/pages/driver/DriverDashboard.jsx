@@ -140,6 +140,17 @@ export default function DriverDashboard() {
     } catch (err) { console.error(err); }
   };
 
+  const handleMarkDelivered = async () => {
+  if (!activeShipment) return;
+  try {
+    await api.post(`/driver/shipments/${activeShipment.id}/deliver`);
+    fetchData(); // Refresh data to show "Searching for Shipments" again
+  } catch (err) {
+    console.error("Failed to mark as delivered:", err);
+    alert("Error updating delivery status.");
+  }
+};
+
   if (loading || !truck) {
     return (
       <div className="h-screen flex items-center justify-center bg-brand-dark">
