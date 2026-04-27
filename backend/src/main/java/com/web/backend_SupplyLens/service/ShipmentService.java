@@ -81,47 +81,50 @@ public class ShipmentService {
             // Mirror nodes to shipment table (Requirement for your logic)
             shipment.setRouteNodes(finalRoute.getPath());
 
-                // --- IMPROVED LOGIC: Fetch REAL road-snapped path from OSRM on the backend ---
-                try {
-                    String path = finalRoute.getPath();
-                    String delimiter = path.contains("->") ? "\\s*->\\s*" : ",\\s*";
-                    String[] nodeNames = path.split(delimiter);
-                    
-                    List<TransitNode> hubs = new ArrayList<>();
-                    for (String name : nodeNames) {
-                        TransitNode n = coordinateService.getCoordinates(name.trim());
-                        if (n != null) hubs.add(n);
-                    }
+            // --- IMPROVED LOGIC: Fetch REAL road-snapped path from OSRM on the backend ---
+            try {
+                String path = finalRoute.getPath();
+                String delimiter = path.contains("->") ? "\\s*->\\s*" : ",\\s*";
+                String[] nodeNames = path.split(delimiter);
 
-                    if (hubs.size() >= 2) {
-                        String coordsStr = hubs.stream()
+                List<TransitNode> hubs = new ArrayList<>();
+                for (String name : nodeNames) {
+                    TransitNode n = coordinateService.getCoordinates(name.trim());
+                    if (n != null)
+                        hubs.add(n);
+                }
+
+                if (hubs.size() >= 2) {
+                    String coordsStr = hubs.stream()
                             .map(h -> h.getLongitude() + "," + h.getLatitude())
                             .collect(Collectors.joining(";"));
-                        
-                        String osrmUrl = "https://router.project-osrm.org/route/v1/driving/" + coordsStr + "?overview=full&geometries=geojson";
-                        Map<String, Object> osrmRes = restTemplate.getForObject(osrmUrl, Map.class);
-                        
-                        if (osrmRes != null && "Ok".equals(osrmRes.get("code"))) {
-                            List<Map<String, Object>> routes = (List<Map<String, Object>>) osrmRes.get("routes");
-                            if (!routes.isEmpty()) {
-                                Map<String, Object> geometry = (Map<String, Object>) routes.get(0).get("geometry");
-                                List<List<Double>> coords = (List<List<Double>>) geometry.get("coordinates");
-                                
-                                // Map GeoJSON [lng, lat] to our JSON [lat, lng] format
-                                List<String> jsonCoords = coords.stream()
+
+                    String osrmUrl = "https://router.project-osrm.org/route/v1/driving/" + coordsStr
+                            + "?overview=full&geometries=geojson";
+                    Map<String, Object> osrmRes = restTemplate.getForObject(osrmUrl, Map.class);
+
+                    if (osrmRes != null && "Ok".equals(osrmRes.get("code"))) {
+                        List<Map<String, Object>> routes = (List<Map<String, Object>>) osrmRes.get("routes");
+                        if (!routes.isEmpty()) {
+                            Map<String, Object> geometry = (Map<String, Object>) routes.get(0).get("geometry");
+                            List<List<Double>> coords = (List<List<Double>>) geometry.get("coordinates");
+
+                            // Map GeoJSON [lng, lat] to our JSON [lat, lng] format
+                            List<String> jsonCoords = coords.stream()
                                     .map(c -> String.format("{\"lat\": %f, \"lng\": %f}", c.get(1), c.get(0)))
                                     .toList();
-                                
-                                shipment.setCurrentPath("[" + String.join(",", jsonCoords) + "]");
-                                System.out.println(">>> SHIPMENT: Persisted high-fidelity road path (" + coords.size() + " nodes)");
-                            }
+
+                            shipment.setCurrentPath("[" + String.join(",", jsonCoords) + "]");
+                            System.out.println(
+                                    ">>> SHIPMENT: Persisted high-fidelity road path (" + coords.size() + " nodes)");
                         }
                     }
-                } catch (Exception e) {
-                    System.err.println("Failed to fetch OSRM road path on backend: " + e.getMessage());
-                    // Fallback to simple hub list if OSRM fails
-                    shipment.setCurrentPath("[]"); 
                 }
+            } catch (Exception e) {
+                System.err.println("Failed to fetch OSRM road path on backend: " + e.getMessage());
+                // Fallback to simple hub list if OSRM fails
+                shipment.setCurrentPath("[]");
+            }
             // --- END ADDED LOGIC ---
         }
 
@@ -137,43 +140,49 @@ public class ShipmentService {
         if (finalRoute != null && warehouse.getAdminUserId() != null) {
             triggerPythonScan(savedShipment, warehouse.getAdminUserId());
         }
-
+        if (savedShipment.getAssignedDriverId() != null) {
+            Map<String, Object> wsMsg = new HashMap<>();
+            wsMsg.put("type", "NEW_ASSIGNMENT");
+            wsMsg.put("shipment", savedShipment);
+            messagingTemplate.convertAndSend("/topic/driver/" + savedShipment.getAssignedDriverId(), wsMsg);
+        }
         return savedShipment;
     }
 
     public void triggerPythonScan(Shipment savedShipment, Long adminId) {
-    try {
-        Map<String, Object> pythonReq = new HashMap<>();
-        pythonReq.put("shipmentId", savedShipment.getId());
-        pythonReq.put("adminId", adminId);
+        try {
+            Map<String, Object> pythonReq = new HashMap<>();
+            pythonReq.put("shipmentId", savedShipment.getId());
+            pythonReq.put("adminId", adminId);
 
-        // --- ADDED LOGIC START ---
-        String path = savedShipment.getRouteNodes();
-        if (path == null || path.isEmpty()) {
-            System.err.println(">>> AI ERROR: No route nodes found for shipment " + savedShipment.getId());
-            return;
+            // --- ADDED LOGIC START ---
+            String path = savedShipment.getRouteNodes();
+            if (path == null || path.isEmpty()) {
+                System.err.println(">>> AI ERROR: No route nodes found for shipment " + savedShipment.getId());
+                return;
+            }
+
+            // Handles "City A -> City B" or "City A, City B"
+            String delimiter = path.contains("->") ? "\\s*->\\s*" : ",\\s*";
+            List<String> nodesList = Arrays.asList(path.split(delimiter));
+            // --- ADDED LOGIC END ---
+
+            pythonReq.put("nodes", nodesList);
+
+            restTemplate.postForEntity("http://localhost:5000/ai/scan-nodes", pythonReq, String.class);
+            System.out.println(
+                    ">>> AI: Triggered Scan for Shipment: " + savedShipment.getId() + " (Admin: " + adminId + ")");
+        } catch (Exception e) {
+            System.err.println(">>> AI ERROR: Scan failed: " + e.getMessage());
         }
-
-        // Handles "City A -> City B" or "City A, City B"
-        String delimiter = path.contains("->") ? "\\s*->\\s*" : ",\\s*";
-        List<String> nodesList = Arrays.asList(path.split(delimiter));
-        // --- ADDED LOGIC END ---
-
-        pythonReq.put("nodes", nodesList);
-
-        restTemplate.postForEntity("http://localhost:5000/ai/scan-nodes", pythonReq, String.class);
-        System.out.println(
-                ">>> AI: Triggered Scan for Shipment: " + savedShipment.getId() + " (Admin: " + adminId + ")");
-    } catch (Exception e) {
-        System.err.println(">>> AI ERROR: Scan failed: " + e.getMessage());
     }
-}
 
     public void tryAssignDriver(Shipment shipment, Warehouse warehouse) {
         double lat = warehouse.getLatitude();
         double lng = warehouse.getLongitude();
 
-        // Smart Fallback: If coordinates are missing, try to find a city name in the warehouse name or city field
+        // Smart Fallback: If coordinates are missing, try to find a city name in the
+        // warehouse name or city field
         if (lat == 0.0 && lng == 0.0) {
             String cityKey = null;
             if (warehouse.getCity() != null && GeoUtils.CITY_COORDINATES.containsKey(warehouse.getCity())) {
@@ -193,15 +202,16 @@ public class ShipmentService {
                 lng = coords[1];
                 System.out.println(">>> ASSIGNMENT: Auto-detected warehouse location from name/city: " + cityKey);
             } else {
-                System.out.println(">>> ASSIGNMENT WARNING: Warehouse " + warehouse.getName() + " has [0,0] coordinates and no city match. Using central India fallback.");
+                System.out.println(">>> ASSIGNMENT WARNING: Warehouse " + warehouse.getName()
+                        + " has [0,0] coordinates and no city match. Using central India fallback.");
                 lat = 20.5937;
                 lng = 78.9629;
             }
         }
 
-        System.out.println(">>> ASSIGNMENT: Searching for driver near warehouse: " + warehouse.getName() + 
-            " (" + lat + ", " + lng + ")");
-            
+        System.out.println(">>> ASSIGNMENT: Searching for driver near warehouse: " + warehouse.getName() +
+                " (" + lat + ", " + lng + ")");
+
         String nearestDriverId = findNearestDriver(lat, lng);
 
         if (nearestDriverId != null) {
@@ -234,6 +244,10 @@ public class ShipmentService {
                 loc.setAvailable(false);
                 locationRepo.saveAndFlush(loc);
             });
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "SHIPMENT_UPDATE");
+            payload.put("payload", shipment); // Send the whole shipment object
+            messagingTemplate.convertAndSend("/topic/driver/" + nearestDriverId, payload);
         } else {
             System.out.println(">>> ASSIGNMENT: No suitable driver found within 300km of " + warehouse.getName());
             shipment.setAssignedDriverId(null);
@@ -243,40 +257,44 @@ public class ShipmentService {
 
     private String findNearestDriver(double warehouseLat, double warehouseLong) {
         List<DriverLocation> availableDrivers = locationRepo.findByAvailableTrue();
-        
+
         // STRICT WAREHOUSE-SCOPED ASSIGNMENT:
         // Only consider drivers whose HOME CITY (profile coordinates) is within 300km
         // of the warehouse. This matches exactly what the "Manage Drivers" page shows.
         // We use the driver's REGISTERED coordinates, NOT their live GPS position.
         List<DriverLocation> validDrivers = new ArrayList<>();
-        
+
         for (DriverLocation dl : availableDrivers) {
             Optional<User> userOpt = userRepo.findByDriverId(dl.getDriverId());
-            if (userOpt.isEmpty()) continue;
-            
+            if (userOpt.isEmpty())
+                continue;
+
             User driver = userOpt.get();
-            
+
             // Skip drivers with no profile coordinates
-            if (driver.getLatitude() == null || driver.getLongitude() == null) continue;
-            
+            if (driver.getLatitude() == null || driver.getLongitude() == null)
+                continue;
+
             // Skip drivers already busy with another shipment
-            if (isDriverAlreadyBusy(dl.getDriverId())) continue;
-            
+            if (isDriverAlreadyBusy(dl.getDriverId()))
+                continue;
+
             // Use HOME CITY coordinates for distance check (same as Manage Drivers page)
-            double dist = GeoUtils.haversineDistance(warehouseLat, warehouseLong, 
-                driver.getLatitude(), driver.getLongitude());
-            
-            // Only include drivers within 300km of the warehouse (same radius as Manage Drivers)
+            double dist = GeoUtils.haversineDistance(warehouseLat, warehouseLong,
+                    driver.getLatitude(), driver.getLongitude());
+
+            // Only include drivers within 300km of the warehouse (same radius as Manage
+            // Drivers)
             if (dist <= 300.0) {
                 validDrivers.add(dl);
-                System.out.println(">>> ASSIGNMENT: Local driver " + dl.getDriverId() + 
-                    " (" + driver.getCity() + ") is " + String.format("%.1f", dist) + " km from warehouse");
+                System.out.println(">>> ASSIGNMENT: Local driver " + dl.getDriverId() +
+                        " (" + driver.getCity() + ") is " + String.format("%.1f", dist) + " km from warehouse");
             }
         }
 
-        System.out.println(">>> ASSIGNMENT: Total available drivers: " + availableDrivers.size() + 
-            " (Local & free for this warehouse: " + validDrivers.size() + ")");
-        
+        System.out.println(">>> ASSIGNMENT: Total available drivers: " + availableDrivers.size() +
+                " (Local & free for this warehouse: " + validDrivers.size() + ")");
+
         if (validDrivers.isEmpty())
             return null;
 
@@ -286,8 +304,8 @@ public class ShipmentService {
 
         for (DriverLocation dl : validDrivers) {
             User driver = userRepo.findByDriverId(dl.getDriverId()).get();
-            double dist = GeoUtils.haversineDistance(warehouseLat, warehouseLong, 
-                driver.getLatitude(), driver.getLongitude());
+            double dist = GeoUtils.haversineDistance(warehouseLat, warehouseLong,
+                    driver.getLatitude(), driver.getLongitude());
             if (dist < minDistance) {
                 minDistance = dist;
                 bestDriver = dl;
@@ -295,8 +313,8 @@ public class ShipmentService {
         }
 
         if (bestDriver != null) {
-            System.out.println(">>> ASSIGNMENT: SUCCESS! Selected nearest LOCAL driver: " + bestDriver.getDriverId() + 
-                " at distance: " + String.format("%.2f", minDistance) + " km");
+            System.out.println(">>> ASSIGNMENT: SUCCESS! Selected nearest LOCAL driver: " + bestDriver.getDriverId() +
+                    " at distance: " + String.format("%.2f", minDistance) + " km");
             return bestDriver.getDriverId();
         }
 
@@ -307,7 +325,8 @@ public class ShipmentService {
         // A driver is busy if they have ANY shipment that is not DELIVERED
         long activeCount = shipmentRepo.countByAssignedDriverIdAndAssignmentStatusNot(driverId, "DELIVERED");
         if (activeCount > 0) {
-            System.out.println(">>> ASSIGNMENT: Driver " + driverId + " skipped (already has " + activeCount + " active shipments)");
+            System.out.println(">>> ASSIGNMENT: Driver " + driverId + " skipped (already has " + activeCount
+                    + " active shipments)");
             return true;
         }
         return false;
@@ -321,21 +340,24 @@ public class ShipmentService {
     public void checkAndAssignPendingShipments() {
         List<Shipment> unassigned = shipmentRepo.findPendingAssignments();
         System.out.println(">>> AUTO-ASSIGN: Found " + unassigned.size() + " pending shipments needing a driver.");
-        
+
         unassigned.sort(Comparator.comparing(Shipment::getId));
 
         for (Shipment shipment : unassigned) {
             Warehouse wh = shipment.getWarehouse();
             if (wh == null) {
-                System.out.println(">>> AUTO-ASSIGN: Shipment " + shipment.getId() + " has no warehouse link — skipping.");
+                System.out.println(
+                        ">>> AUTO-ASSIGN: Shipment " + shipment.getId() + " has no warehouse link — skipping.");
                 continue;
             }
-            
-            System.out.println(">>> AUTO-ASSIGN: Attempting to assign Driver to Shipment " + shipment.getId() + " from " + wh.getName());
+
+            System.out.println(">>> AUTO-ASSIGN: Attempting to assign Driver to Shipment " + shipment.getId() + " from "
+                    + wh.getName());
             tryAssignDriver(shipment, wh);
-            
+
             if ("ASSIGNED".equals(shipment.getAssignmentStatus())) {
-                System.out.println(">>> AUTO-ASSIGN: SUCCESS! Shipment " + shipment.getId() + " assigned to " + shipment.getAssignedDriverId());
+                System.out.println(">>> AUTO-ASSIGN: SUCCESS! Shipment " + shipment.getId() + " assigned to "
+                        + shipment.getAssignedDriverId());
                 shipmentRepo.save(shipment);
             } else {
                 System.out.println(">>> AUTO-ASSIGN: FAILED to find nearby driver for Shipment " + shipment.getId());

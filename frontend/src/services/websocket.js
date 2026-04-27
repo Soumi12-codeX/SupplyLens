@@ -1,42 +1,66 @@
-// WebSocket Service for SupplyLens - POLLING FALLBACK VERSION
-// Neutered to allow Polling to take over without console errors
+import SockJS from 'sockjs-client';
+import { over } from 'stompjs';
 
 class WebSocketService {
   constructor() {
-    this.ws = null;
+    this.stompClient = null;
+    this.isConnected = false;
     this.subscribers = new Map();
-    this.isConnected = false;
   }
 
-  connect(url) {
-    // Logic disabled for Prototype Stability
-    console.log('[WS] WebSocket disabled: Using REST Polling for real-time updates.');
-    this.isConnected = false;
+  connect(token) {
+    const socket = new SockJS('https://supplylens-4n7e.onrender.com/ws');
+    this.stompClient = over(socket);
+    
+    // Disable annoying console logs from stomp
+    this.stompClient.debug = null; 
+
+    const headers = {
+      Authorization: `Bearer ${token}`
+    };
+
+    this.stompClient.connect(headers, () => {
+      this.isConnected = true;
+      console.log('[WS] Connected to SupplyLens Real-Time Engine');
+      
+      // Re-subscribe to all existing topics if we were disconnected
+      this.subscribers.forEach((callbacks, topic) => {
+        this.stompClient.subscribe(topic, (msg) => {
+          const data = JSON.parse(msg.body);
+          callbacks.forEach(cb => cb(data));
+        });
+      });
+    }, (error) => {
+      console.error('[WS] Connection error:', error);
+      this.isConnected = false;
+      // Auto-reconnect after 5 seconds
+      setTimeout(() => this.connect(token), 5000);
+    });
   }
 
-  subscribe(event, callback) {
-    // We return a dummy unsubscribe function so components don't crash
-    if (!this.subscribers.has(event)) {
-      this.subscribers.set(event, new Set());
+  subscribe(topic, callback) {
+    if (!this.subscribers.has(topic)) {
+      this.subscribers.set(topic, new Set());
     }
-    this.subscribers.get(event).add(callback);
+    this.subscribers.get(topic).add(callback);
+
+    // If already connected, subscribe immediately
+    if (this.isConnected && this.stompClient) {
+      this.stompClient.subscribe(topic, (msg) => {
+        callback(JSON.parse(msg.body));
+      });
+    }
+
     return () => {
-      this.subscribers.get(event)?.delete(callback);
+      this.subscribers.get(topic)?.delete(callback);
     };
   }
 
-  send(type, data) {
-    console.warn('[WS] Send ignored: App is currently in Polling Mode.');
-  }
-
   disconnect() {
-    console.log('[WS] Disconnected (Polling Mode)');
-    this.isConnected = false;
-  }
-
-  // Internal helper kept to avoid reference errors
-  _notify(event, data) {
-    this.subscribers.get(event)?.forEach((cb) => cb(data));
+    if (this.stompClient) {
+      this.stompClient.disconnect();
+      this.isConnected = false;
+    }
   }
 }
 

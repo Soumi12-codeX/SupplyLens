@@ -263,19 +263,33 @@ export default function DriverDashboard() {
 
 
   useEffect(() => {
-  // Initial fetch
-  fetchData();
+    if (!user?.driverId) return;
 
-  // Polling interval
-  const interval = setInterval(() => {
-    // Only fetch if the tab is active to save Render/Railway resources
-    if (!document.hidden) {
-      fetchData();
-    }
-  }, 3000);
+    const token = localStorage.getItem('token');
+    wsService.connect(token);
 
-  return () => clearInterval(interval);
-}, [user?.driverId]); // Only re-run if the driver ID actually changes
+    // Initial fetch for static data
+    fetchData();
+
+    // Listen for real-time location/shipment updates
+    const unsubscribe = wsService.subscribe(`/topic/driver/${user.driverId}`, (update) => {
+      if (update.type === 'SHIPMENT_UPDATE') {
+        setActiveShipment(update.payload);
+        // If the backend says we are on a new route, update the truck visually
+        if (update.payload.assignmentStatus === 'IN_PROGRESS') {
+          // Re-calculate the truck state based on the new payload
+        }
+      }
+      if (update.type === 'LOCATION_UPDATE') {
+        setTruck(prev => ({ ...prev, currentPosition: update.position }));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      wsService.disconnect();
+    };
+  }, [user?.driverId]);
 
 
 
