@@ -201,6 +201,17 @@ export default function DriverDashboard() {
   const isInProgress = activeShipment?.assignmentStatus === 'IN_PROGRESS';
   const progressPercent = Math.round((truck.progress || 0) * 100);
 
+  if (!truck) {
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center bg-brand-dark space-y-4">
+      <Loader2 className="animate-spin text-neon-blue w-12 h-12" />
+      <p className="text-slate-400 font-bold tracking-widest animate-pulse">
+        INITIALIZING SYSTEMS...
+      </p>
+    </div>
+  );
+}
+
   return (
     <div className="h-screen flex bg-brand-dark overflow-hidden">
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
