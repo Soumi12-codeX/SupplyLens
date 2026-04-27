@@ -1,4 +1,5 @@
-FROM python:3.9-slim
+# Use Python 3.13 to match your local requirements
+FROM python:3.13-slim
 
 # Set the working directory
 WORKDIR /app
@@ -13,5 +14,5 @@ COPY . .
 # Expose the Flask port
 EXPOSE 5000
 
-# Run using Gunicorn for production stability
+# Run using Gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
