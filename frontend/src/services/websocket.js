@@ -10,38 +10,35 @@ class WebSocketService {
   }
 
   connect(token) {
-    // Prevent redundant connection attempts if already connecting or connected
-    if (this.isConnected || (this.stompClient && this.stompClient.ws.readyState === 0)) {
-      return;
-    }
-
-    const socket = new SockJS('https://supplylens-4n7e.onrender.com/ws');
-    this.stompClient = over(socket);
-    this.stompClient.debug = null; 
-
-    const headers = {
-      Authorization: `Bearer ${token}`
-    };
-
-    this.stompClient.connect(headers, () => {
-      this.isConnected = true;
-      console.log('[WS] Connected to SupplyLens Real-Time Engine');
-      
-      this.subscribers.forEach((callbacks, topic) => {
-        this.stompClient.subscribe(topic, (msg) => {
-          const data = JSON.parse(msg.body);
-          callbacks.forEach(cb => cb(data));
-        });
-      });
-    }, (error) => {
-      console.error('[WS] Connection error:', error);
-      this.isConnected = false;
-      // Only retry if we haven't manually nulled the client
-      if (this.stompClient) {
-        setTimeout(() => this.connect(token), 5000);
-      }
-    });
+  if (this.isConnected || (this.stompClient && this.stompClient.ws?.readyState === 0)) {
+    return;
   }
+
+  const socket = new SockJS('https://supplylens-4n7e.onrender.com/ws');
+  this.stompClient = over(socket);
+  this.stompClient.debug = null;
+
+  const headers = { Authorization: `Bearer ${token}` };
+
+  this.stompClient.connect(headers, () => {
+    this.isConnected = true;
+    console.log('[WS] Connected');
+
+    // Re-subscribe all pending subscribers
+    this.subscribers.forEach((callbacks, topic) => {
+      this.stompClient.subscribe(topic, (msg) => {
+        const data = JSON.parse(msg.body);
+        callbacks.forEach(cb => cb(data));
+      });
+    });
+  }, (error) => {
+    console.error('[WS] Connection error:', error);
+    this.isConnected = false;
+    if (this.stompClient) {
+      setTimeout(() => this.connect(token), 5000);
+    }
+  });
+}
 
   subscribe(topic, callback) {
     if (!this.subscribers.has(topic)) {
