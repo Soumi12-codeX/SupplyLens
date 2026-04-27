@@ -263,14 +263,19 @@ export default function DriverDashboard() {
 
 
   useEffect(() => {
+  // Initial fetch
+  fetchData();
 
-    fetchData();
+  // Polling interval
+  const interval = setInterval(() => {
+    // Only fetch if the tab is active to save Render/Railway resources
+    if (!document.hidden) {
+      fetchData();
+    }
+  }, 3000);
 
-    const interval = setInterval(fetchData, 3000); // Poll every 3s for smooth tracking
-
-    return () => clearInterval(interval);
-
-  }, [user]);
+  return () => clearInterval(interval);
+}, [user?.driverId]); // Only re-run if the driver ID actually changes
 
 
 
