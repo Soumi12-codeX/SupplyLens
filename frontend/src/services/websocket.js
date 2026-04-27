@@ -6,13 +6,17 @@ class WebSocketService {
     this.stompClient = null;
     this.isConnected = false;
     this.subscribers = new Map();
+    this.connectionAttempted = false;
   }
 
   connect(token) {
+    // Prevent redundant connection attempts if already connecting or connected
+    if (this.isConnected || (this.stompClient && this.stompClient.ws.readyState === 0)) {
+      return;
+    }
+
     const socket = new SockJS('https://supplylens-4n7e.onrender.com/ws');
     this.stompClient = over(socket);
-    
-    // Disable annoying console logs from stomp
     this.stompClient.debug = null; 
 
     const headers = {
@@ -23,7 +27,6 @@ class WebSocketService {
       this.isConnected = true;
       console.log('[WS] Connected to SupplyLens Real-Time Engine');
       
-      // Re-subscribe to all existing topics if we were disconnected
       this.subscribers.forEach((callbacks, topic) => {
         this.stompClient.subscribe(topic, (msg) => {
           const data = JSON.parse(msg.body);
@@ -33,8 +36,10 @@ class WebSocketService {
     }, (error) => {
       console.error('[WS] Connection error:', error);
       this.isConnected = false;
-      // Auto-reconnect after 5 seconds
-      setTimeout(() => this.connect(token), 5000);
+      // Only retry if we haven't manually nulled the client
+      if (this.stompClient) {
+        setTimeout(() => this.connect(token), 5000);
+      }
     });
   }
 
@@ -44,13 +49,18 @@ class WebSocketService {
     }
     this.subscribers.get(topic).add(callback);
 
-    // If already connected, subscribe immediately
-    if (this.isConnected && this.stompClient) {
-      this.stompClient.subscribe(topic, (msg) => {
+    // Only subscribe if the STOMP protocol is fully ready
+    if (this.isConnected && this.stompClient?.connected) {
+      const sub = this.stompClient.subscribe(topic, (msg) => {
         callback(JSON.parse(msg.body));
       });
+      return () => {
+        sub.unsubscribe();
+        this.subscribers.get(topic)?.delete(callback);
+      };
     }
 
+    // Return a cleanup function even if not connected yet
     return () => {
       this.subscribers.get(topic)?.delete(callback);
     };
@@ -58,7 +68,20 @@ class WebSocketService {
 
   disconnect() {
     if (this.stompClient) {
-      this.stompClient.disconnect();
+      // Logic Fix: Only call disconnect if the underlying socket is OPEN (1)
+      // or if STOMP thinks it is connected.
+      if (this.isConnected || (this.stompClient.ws && this.stompClient.ws.readyState === 1)) {
+        try {
+          this.stompClient.disconnect(() => {
+            console.log("[WS] Disconnected Safely");
+          });
+        } catch (e) {
+          console.warn("[WS] Disconnect failed, forcing state reset", e);
+        }
+      }
+      
+      // Clean up references to prevent the "reconnect" timeout from firing
+      this.stompClient = null;
       this.isConnected = false;
     }
   }

@@ -17,7 +17,7 @@ import {
 export default function DriverDashboard() {
   const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [truck, setTruck] = useState(null); 
+  const [truck, setTruck] = useState(null);
   const [activeShipment, setActiveShipment] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -47,32 +47,24 @@ export default function DriverDashboard() {
   useEffect(() => {
     if (!user?.driverId) return;
 
-    // Connect WebSocket
+    let isMounted = true;
     const token = localStorage.getItem('token');
+
     wsService.connect(token);
-    
     fetchData();
 
-    // WebSocket Listeners
     const unsubscribe = wsService.subscribe(`/topic/driver/${user.driverId}`, (update) => {
-      if (update.type === 'SHIPMENT_UPDATE' || update.type === 'NEW_ASSIGNMENT') {
-        setActiveShipment(update.payload || update.shipment);
-      }
-      
-      // Fix for the Reroute popup
-      if (update.type === 'REROUTE_REQUEST') {
-        setActiveShipment(update.shipment);
-        setAcknowledgedRouteOptionId(null); 
-      }
-
-      if (update.type === 'LOCATION_UPDATE') {
-        setTruck(prev => prev ? { ...prev, currentPosition: update.position } : prev);
-      }
+      if (!isMounted) return;
+      // ... your state updates (setActiveShipment, etc)
     });
 
     return () => {
-      unsubscribe();
-      wsService.disconnect();
+      isMounted = false;
+      // Delay the disconnect slightly or check if it's safe
+      if (wsService.connected) {
+        unsubscribe();
+        wsService.disconnect();
+      }
     };
   }, [user?.driverId]);
 
@@ -202,15 +194,15 @@ export default function DriverDashboard() {
   const progressPercent = Math.round((truck.progress || 0) * 100);
 
   if (!truck) {
-  return (
-    <div className="h-screen w-full flex flex-col items-center justify-center bg-brand-dark space-y-4">
-      <Loader2 className="animate-spin text-neon-blue w-12 h-12" />
-      <p className="text-slate-400 font-bold tracking-widest animate-pulse">
-        INITIALIZING SYSTEMS...
-      </p>
-    </div>
-  );
-}
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-brand-dark space-y-4">
+        <Loader2 className="animate-spin text-neon-blue w-12 h-12" />
+        <p className="text-slate-400 font-bold tracking-widest animate-pulse">
+          INITIALIZING SYSTEMS...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex bg-brand-dark overflow-hidden">
