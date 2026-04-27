@@ -27,59 +27,83 @@ export default function DriverDashboard() {
   const [activeRouteOption, setActiveRouteOption] = useState(null);
 
   const fetchData = async () => {
-    if (!user?.driverId) return;
-    try {
-      const locRes = await api.get(`/driver/location/${user.driverId}`);
-      const loc = locRes.data || { latitude: 20.5937, longitude: 78.9629 };
+  if (!user?.driverId) {
+    console.warn("No driverId found on user:", user);
+    setLoading(false);
+    return;
+  }
+  try {
+    const locRes = await api.get(`/driver/location/${user.driverId}`);
+    const loc = locRes.data || { latitude: 20.5937, longitude: 78.9629 };
 
-      const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
-      const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
+    const shipRes = await api.get(`/driver/shipments/${user.driverId}`);
+    const current = shipRes.data.find(s => s.assignmentStatus !== 'DELIVERED') || null;
 
-      setActiveShipment(current);
-      // ... (Rest of your truck/path parsing logic stays here)
-      setLoading(false);
-    } catch (err) {
-      console.error("Fetch failed", err);
-      setLoading(false);
+    setActiveShipment(current);
+
+    // ── Build truck object from real data ──────────────────────────
+    let routeCoords = [];
+    if (current?.currentPath) {
+      try {
+        routeCoords = JSON.parse(current.currentPath);
+      } catch {
+        routeCoords = [];
+      }
     }
-  };
 
-  useEffect(() => {
-    if (!user?.driverId) return;
-
-    let isMounted = true;
-    const token = localStorage.getItem('token');
-
-    wsService.connect(token);
-    fetchData();
-
-    const unsubscribe = wsService.subscribe(`/topic/driver/${user.driverId}`, (update) => {
-      if (!isMounted) return;
-
-      if (update.type === 'NEW_ASSIGNMENT' || update.type === 'SHIPMENT_UPDATE') {
-        setActiveShipment(update.shipment || update.payload);
-      }
-
-      if (update.type === 'REROUTE_REQUEST') {
-        setActiveShipment(prev => ({
-          ...prev,
-          routeStatus: 'REROUTED',
-          activeRouteOptionId: update.routeOptionId
-        }));
-        // This triggers showReroutePopup automatically since the condition checks:
-        // activeShipment?.routeStatus === 'REROUTED' && activeShipment?.activeRouteOptionId != null
-      }
+    setTruck({
+      id: user.driverId,
+      currentPosition: { lat: loc.latitude, lng: loc.longitude },
+      route: routeCoords,
+      progressIndex: 0,
+      progress: 0,
+      originName: current?.warehouse?.name || "Origin",
+      destinationName: current?.route?.destination?.name || "Destination",
+      cargo: current?.notes || "Cargo",
+      eta: current?.route?.estimatedTime || "N/A",
+      speed: 60,
+      distanceRemaining: "Calculating...",
     });
 
-    return () => {
-      isMounted = false;
-      // Delay the disconnect slightly or check if it's safe
-      if (wsService.connected) {
-        unsubscribe();
-        wsService.disconnect();
-      }
-    };
-  }, [user?.driverId]);
+    setLoading(false);
+  } catch (err) {
+    console.error("Fetch failed", err);
+    // ── Set a fallback truck so UI doesn't hang on loader ──────────
+    setTruck({
+      id: user.driverId || "unknown",
+      currentPosition: { lat: 20.5937, lng: 78.9629 },
+      route: [],
+      progressIndex: 0,
+      progress: 0,
+      originName: "Pending",
+      destinationName: "Pending",
+      cargo: "",
+      eta: "N/A",
+      speed: 0,
+      distanceRemaining: "N/A",
+    });
+    setLoading(false);
+  }
+};
+
+  useEffect(() => {
+  if (!user?.driverId) return;
+  
+  // Poll driver location every 3 seconds to reflect simulator updates
+  const interval = setInterval(async () => {
+    try {
+      const res = await api.get(`/driver/location/${user.driverId}`);
+      setTruck(prev => prev ? {
+        ...prev,
+        currentPosition: { lat: res.data.latitude, lng: res.data.longitude }
+      } : prev);
+    } catch (err) {
+      // silent fail — don't crash the dashboard on a poll failure
+    }
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [user?.driverId]);
 
   // Derived logic with Type Safety
   const showReroutePopup = activeShipment?.routeStatus === 'REROUTED'
