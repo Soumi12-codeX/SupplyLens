@@ -1,55 +1,79 @@
 import React, { useState, useEffect } from 'react';
+
 import Sidebar from '../../components/Sidebar';
+
 import DriverMessages from './DriverMessages';
-import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
-import { MessageSquare, Loader2 } from 'lucide-react';
+
+import { MockSimulator } from '../../services/mockData';
+
+import { MessageSquare } from 'lucide-react';
+
+
 
 export default function DriverMessagesPage() {
-  const { user } = useAuth();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchMessages = async () => {
-    if (!user?.driverId) return;
-    try {
-      // Point this to your actual alerts endpoint
-      const res = await api.get(`/alerts/driver/${user.driverId}`);
-      
-      // Transform backend data to fit the UI format
-      const formattedMessages = res.data.map(alert => ({
-        id: alert.id,
-        type: 'ai_suggestion',
-        icon: '🤖',
-        title: alert.title || 'Route Update',
-        text: alert.message || alert.reason,
-        timeSaved: alert.timeSaved || '5 min',
-        timestamp: alert.createdAt || new Date(),
-        status: alert.status || 'pending'
-      }));
-      
-      setMessages(formattedMessages);
-      setLoading(false);
-    } catch (err) {
-      console.error("Failed to fetch messages:", err);
-      setLoading(false);
-    }
-  };
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const [truck, setTruck] = useState(null);
+
+  const [messages, setMessages] = useState([]);
+
+
 
   useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 5000); // Poll for messages every 5s
-    return () => clearInterval(interval);
-  }, [user]);
 
-  const handleAccept = async (msgId) => {
-    try {
-      await api.post(`/alerts/accept/${msgId}`);
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'accepted' } : m));
-    } catch (err) {
-      alert("Could not accept route.");
-    }
+    const sim = new MockSimulator(
+
+      (fleet) => setTruck(fleet[0]),
+
+      (alert) => {
+
+        if (!truck || alert.truckId === truck?.id) {
+
+          setMessages((prev) => [{
+
+            id: alert.id,
+
+            type: 'ai_suggestion',
+
+            icon: alert.icon,
+
+            title: alert.title,
+
+            text: `${alert.description} ${alert.suggestedRoute?.description || ''}`,
+
+            timeSaved: alert.suggestedRoute?.timeSaved,
+
+            extraDistance: alert.suggestedRoute?.additionalDistance,
+
+            timestamp: alert.timestamp,
+
+            status: 'pending',
+
+          }, ...prev]);
+
+        }
+
+      }
+
+    );
+
+    sim.start();
+
+    return () => sim.stop();
+
+  }, []);
+
+
+
+  const handleAccept = (msgId) => {
+
+    setMessages((prev) =>
+
+      prev.map((m) => m.id === msgId ? { ...m, status: 'accepted' } : m)
+
+    );
+
   };
 
   return (
