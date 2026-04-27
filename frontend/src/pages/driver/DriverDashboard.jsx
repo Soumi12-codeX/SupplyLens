@@ -82,10 +82,10 @@ export default function DriverDashboard() {
           originName: current.warehouse?.name,
           destinationName: current.route?.destination?.name || "N/A",
           cargo: current.notes,
-          progress: 0.5, // Simplified for prototype
-          speed: 65,
+          progress: parsedRoute.length > 0 ? (current.currentStepIndex / parsedRoute.length) : 0,
+          speed: loc.speed || 65,
           eta: current.route?.estimatedTime || "4h",
-          distanceRemaining: "Calculating..."
+          distanceRemaining: `${current.distanceRemaining || 0} km`
         };
         setTruck(activeTruck);
       }
