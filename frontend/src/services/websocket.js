@@ -12,7 +12,7 @@ class WebSocketService {
     this.isConnected = false;
   }
 
-  connect(url = 'ws://localhost:8080') {
+  connect(url = 'wss://supplylens-4n7e.onrender.com/ws/websocket') {
     this.url = url;
 
     try {
