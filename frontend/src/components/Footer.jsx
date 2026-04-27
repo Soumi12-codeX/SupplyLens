@@ -55,9 +55,8 @@ export default function Footer() {
           {/* Column 3 */}
           <div className="flex flex-col gap-4">
             <h4 className="text-white font-space font-semibold tracking-wider uppercase text-sm mb-4">Company</h4>
-            <Link to="/" className="text-slate-400 font-outfit hover:text-white transition-colors text-base">About Us</Link>
-            <Link to="/" className="text-slate-400 font-outfit hover:text-white transition-colors text-base">Careers</Link>
-            <Link to="/" className="text-slate-400 font-outfit hover:text-white transition-colors text-base">Contact</Link>
+            <Link to="/about" className="text-slate-400 font-outfit hover:text-white transition-colors text-base">About Us</Link>
+            <Link to="/contact" className="text-slate-400 font-outfit hover:text-white transition-colors text-base">Contact</Link>
           </div>
 
           {/* Column 4: Socials */}
