@@ -23,6 +23,7 @@ export default function DriverDashboard() {
   const [startingTrip, setStartingTrip] = useState(false);
   const [acknowledgedRouteOptionId, setAcknowledgedRouteOptionId] = useState(null);
   const [activeRouteOption, setActiveRouteOption] = useState(null);
+  const [bottomPanelExpanded, setBottomPanelExpanded] = useState(false);
 
   // 1. Fetch data from Backend
   const fetchData = async () => {
