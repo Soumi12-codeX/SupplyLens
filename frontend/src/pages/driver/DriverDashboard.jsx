@@ -79,13 +79,19 @@ export default function DriverDashboard() {
           currentPosition: { lat: loc.latitude, lng: loc.longitude },
           status: 'on-route',
           route: parsedRoute,
-          originName: current.warehouse?.name,
-          destinationName: current.route?.destination?.name || "N/A",
-          cargo: current.notes,
-          progress: parsedRoute.length > 0 ? (current.currentStepIndex / parsedRoute.length) : 0,
-          speed: loc.speed || 65,
-          eta: current.route?.estimatedTime || "4h",
-          distanceRemaining: `${current.distanceRemaining || 0} km`
+          originName: current.warehouse?.name || "Origin",
+          destinationName: current.route?.destination?.name || "Destination",
+          cargo: current.notes || "Standard Cargo",
+
+          // FIX: This calculation needs to match your backend's field names
+          // If your backend uses 'currentStep' or 'index', change it here:
+          progress: (parsedRoute.length > 0 && current.currentStepIndex !== undefined)
+            ? (current.currentStepIndex / (parsedRoute.length - 1))
+            : 0.1, // Default to 10% so it's not 0 if data is missing
+
+          speed: loc.speed || 60,
+          eta: current.route?.estimatedTime || "Calculating...",
+          distanceRemaining: current.distanceRemaining ? `${current.distanceRemaining} km` : "In progress"
         };
         setTruck(activeTruck);
       }
@@ -99,7 +105,7 @@ export default function DriverDashboard() {
   // POLLING ENGINE: Runs every 3 seconds
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 3000); 
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -126,7 +132,7 @@ export default function DriverDashboard() {
     try {
       await api.post(`/driver/shipments/${activeShipment.id}/start`);
       fetchData();
-    } catch (err) { alert("Failed to start trip."); } 
+    } catch (err) { alert("Failed to start trip."); }
     finally { setStartingTrip(false); }
   };
 
@@ -142,15 +148,15 @@ export default function DriverDashboard() {
   };
 
   const handleMarkDelivered = async () => {
-  if (!activeShipment) return;
-  try {
-    await api.post(`/driver/shipments/${activeShipment.id}/deliver`);
-    fetchData(); // Refresh data to show "Searching for Shipments" again
-  } catch (err) {
-    console.error("Failed to mark as delivered:", err);
-    alert("Error updating delivery status.");
-  }
-};
+    if (!activeShipment) return;
+    try {
+      await api.post(`/driver/shipments/${activeShipment.id}/deliver`);
+      fetchData(); // Refresh data to show "Searching for Shipments" again
+    } catch (err) {
+      console.error("Failed to mark as delivered:", err);
+      alert("Error updating delivery status.");
+    }
+  };
 
   if (loading || !truck) {
     return (
@@ -305,10 +311,10 @@ export default function DriverDashboard() {
                 <div className="relative group max-w-sm w-full animate-fade-in-up">
                   {/* Animated Border Glow */}
                   <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 via-amber-400 to-orange-600 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000 group-hover:duration-200 animate-pulse"></div>
-                  
+
                   {/* Main Modal Content */}
                   <div className="relative bg-slate-900/90 border border-white/10 backdrop-blur-2xl rounded-3xl p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] flex flex-col items-center text-center">
-                    
+
                     {/* Futuristic Icon Hub */}
                     <div className="relative mb-8">
                       <div className="absolute inset-0 bg-orange-500/20 blur-2xl rounded-full animate-pulse"></div>
@@ -317,7 +323,7 @@ export default function DriverDashboard() {
                         <div className="absolute inset-0 bg-gradient-to-b from-orange-500/20 to-transparent h-1/2 w-full animate-[bounce_3s_infinite] opacity-50"></div>
                         <AlertTriangle className="text-orange-500 w-10 h-10 drop-shadow-[0_0_15px_rgba(249,115,22,0.6)]" />
                       </div>
-                      
+
                       {/* Floating Particles (CSS) */}
                       <div className="absolute -top-2 -right-2 w-3 h-3 rounded-full bg-orange-400/40 animate-ping"></div>
                     </div>
@@ -360,7 +366,7 @@ export default function DriverDashboard() {
                       </div>
                     </button>
 
-                    <button 
+                    <button
                       onClick={() => setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId)}
                       className="mt-6 text-slate-500 text-[11px] font-bold uppercase tracking-widest hover:text-white transition-colors"
                     >
@@ -377,7 +383,7 @@ export default function DriverDashboard() {
           {isAssigned && (
             <div className="absolute top-4 left-4 bottom-4 w-full max-w-[340px] pointer-events-none z-[1500] flex items-center md:items-start">
               <div className="relative group w-full bg-slate-900/40 border border-white/10 rounded-[32px] overflow-hidden shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)] backdrop-blur-2xl animate-fade-in-left pointer-events-auto max-h-[90vh] flex flex-col">
-                
+
                 {/* Top Brand Stripe */}
                 <div className="h-1.5 w-full bg-gradient-to-r from-neon-blue via-brand-primary to-neon-blue animate-[gradient_3s_linear_infinite]"></div>
 
@@ -437,7 +443,7 @@ export default function DriverDashboard() {
                     <div className="relative p-5 rounded-3xl bg-slate-950/50 border border-white/5 overflow-hidden group/journey">
                       {/* Scanning Line */}
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon-blue/40 to-transparent animate-[scan_2s_linear_infinite] pointer-events-none"></div>
-                      
+
                       <p className="text-[10px] text-neon-blue/60 font-black uppercase tracking-widest mb-4">Journey Visualizer</p>
                       <div className="space-y-5 relative">
                         <div className="absolute left-[7px] top-2 bottom-2 w-[1px] bg-slate-800 border-l border-dashed border-slate-700"></div>
@@ -515,7 +521,7 @@ export default function DriverDashboard() {
         {isInProgress && (
           <div className={`border-t border-white/5 bg-slate-950/40 backdrop-blur-3xl transition-all duration-500 shrink-0 ${bottomPanelExpanded ? 'h-64 md:h-56' : 'h-16'
             } safe-area-inset-bottom`}>
-            
+
             {/* Toggle Handle */}
             <button
               onClick={() => setBottomPanelExpanded(!bottomPanelExpanded)}
@@ -551,14 +557,14 @@ export default function DriverDashboard() {
                       <span className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Departed</span>
                     </div>
                     <div className="flex flex-col items-center">
-                       <span className="text-white text-xs font-black tracking-widest bg-white/[0.05] px-3 py-1 rounded-full border border-white/5">{progressPercent}%</span>
+                      <span className="text-white text-xs font-black tracking-widest bg-white/[0.05] px-3 py-1 rounded-full border border-white/5">{progressPercent}%</span>
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="text-red-400 text-[10px] font-black uppercase tracking-widest">{truck.destinationName}</span>
                       <span className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Destination</span>
                     </div>
                   </div>
-                  
+
                   {/* Premium Progress Bar */}
                   <div className="relative h-3 w-full rounded-full bg-slate-900 border border-white/5 p-0.5 overflow-hidden">
                     <div
@@ -580,7 +586,7 @@ export default function DriverDashboard() {
                       </div>
                       <p className="text-white text-xl font-black font-outfit tracking-tight">{truck.eta}</p>
                     </div>
-                    
+
                     <div className="group/stat p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         <Gauge size={16} className="text-neon-blue opacity-70 group-hover:opacity-100 transition-opacity" />
