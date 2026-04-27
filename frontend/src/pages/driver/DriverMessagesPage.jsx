@@ -4,6 +4,7 @@ import DriverMessages from './DriverMessages';
 import { MockSimulator } from '../../services/mockData';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import wsService from '../../services/websocket'; 
 import { MessageSquare, Loader2 } from 'lucide-react';
 
 export default function DriverMessagesPage() {
@@ -13,12 +14,11 @@ export default function DriverMessagesPage() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Mock Simulator Logic (Visual Tracking)
+  // 1. KEEPING MOCK SIMULATOR INTACT
   useEffect(() => {
     const sim = new MockSimulator(
       (fleet) => setTruck(fleet[0]),
       (alert) => {
-        // Only add mock alerts if we don't have real ones or for testing simulation
         if (!truck || alert.truckId === truck?.id) {
           const mockMsg = {
             id: alert.id,
@@ -39,53 +39,51 @@ export default function DriverMessagesPage() {
     return () => sim.stop();
   }, [truck?.id]);
 
-  // 2. Real API Polling Logic (Official Alerts)
+  // 2. Real WebSocket Logic + Initial Fetch
   useEffect(() => {
     if (!user?.driverId) return;
+
+    const token = localStorage.getItem('token');
+    wsService.connect(token);
 
     const fetchMessages = async () => {
       try {
         const res = await api.get(`/alerts/driver/${user.driverId}`);
-        
-        // Transform backend data to match your UI format if necessary
-        const formattedRealMessages = res.data.map(msg => ({
+        const formatted = res.data.map(msg => ({
           ...msg,
-          // Ensure these fields exist for the DriverMessages component
-          status: msg.status || 'pending', 
+          status: msg.status || 'pending',
           type: 'ai_suggestion'
         }));
-
-        // Merge or replace. Here we replace to keep the list clean with latest DB state
         setMessages(prev => {
-          // Keep mock messages but update/add real ones
           const mocks = prev.filter(m => m.title.includes('[MOCK]'));
-          return [...formattedRealMessages, ...mocks];
+          return [...formatted, ...mocks];
         });
-        
         setLoading(false);
-      } catch (err) {
-        console.error("Failed to fetch real messages:", err);
-        setLoading(false);
-      }
+      } catch (err) { setLoading(false); }
     };
 
     fetchMessages();
-    const interval = setInterval(fetchMessages, 5000); 
-    return () => clearInterval(interval);
+
+    // Listen for real-time alerts
+    const unsubscribe = wsService.subscribe(`/topic/driver/${user.driverId}`, (update) => {
+      if (update.type === 'NEW_ALERT' || update.type === 'REROUTE_REQUEST') {
+        const newMsg = { ...update.alert, status: 'pending', type: 'ai_suggestion' };
+        setMessages(prev => [newMsg, ...prev]);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      wsService.disconnect();
+    };
   }, [user?.driverId]);
 
   const handleAccept = async (msgId) => {
-    // If it's a real message (not mock), sync with backend
     const isMock = messages.find(m => m.id === msgId)?.title.includes('[MOCK]');
-    
     if (!isMock) {
-      try {
-        await api.post(`/alerts/${msgId}/accept`);
-      } catch (err) {
-        console.error("Failed to sync acceptance with backend");
-      }
+      try { await api.post(`/alerts/${msgId}/accept`); } 
+      catch (err) { console.error("Sync failed"); }
     }
-
     setMessages((prev) =>
       prev.map((m) => m.id === msgId ? { ...m, status: 'accepted' } : m)
     );
