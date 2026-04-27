@@ -63,7 +63,6 @@ export default function DriverDashboard() {
       // Delay the disconnect slightly or check if it's safe
       if (wsService.connected) {
         unsubscribe();
-        wsService.disconnect();
       }
     };
   }, [user?.driverId]);
