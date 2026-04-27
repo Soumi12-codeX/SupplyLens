@@ -85,8 +85,9 @@ export default function LiveMapPage() {
   useEffect(() => {
     const fetchShipments = async () => {
       try {
+        const adminId = user?.id;
         const warehouseId = user?.warehouse?.id;
-        const url = warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments';
+        const url = adminId ? `/admin/shipments?adminId=${adminId}` : (warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments');
         const res = await api.get(url);
         const realShipments = transformShipments(res.data);
         setFleet(realShipments);
@@ -161,7 +162,9 @@ export default function LiveMapPage() {
         return;
       }
 
-      const shipRes = await api.get(`/admin/shipments`);
+      const adminId = user?.id;
+      const shipUrl = adminId ? `/admin/shipments?adminId=${adminId}` : `/admin/shipments`;
+      const shipRes = await api.get(shipUrl);
       const shipment = shipRes.data.find(s => s.id.toString() === shipmentIdStr);
       
       const sourceWhId = shipment?.warehouse?.id || 1;

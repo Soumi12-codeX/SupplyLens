@@ -19,9 +19,11 @@ export default function FleetPage() {
   useEffect(() => {
     const fetchFleet = async () => {
       try {
+        const adminId = user?.id;
         const warehouseId = user?.warehouse?.id;
-        const url = warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments';
-        console.log('[FleetPage] Fetching fleet for warehouseId:', warehouseId, 'URL:', url);
+        console.log('[FleetPage] User Context:', user);
+        const url = adminId ? `/admin/shipments?adminId=${adminId}` : (warehouseId ? `/admin/shipments?warehouseId=${warehouseId}` : '/admin/shipments');
+        console.log('[FleetPage] Fetching fleet with URL:', url);
         const res = await api.get(url);
         console.log('[FleetPage] Received shipments:', res.data.length);
         // Map backend Shipment to UI format

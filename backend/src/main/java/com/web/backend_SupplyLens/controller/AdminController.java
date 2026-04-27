@@ -44,11 +44,17 @@ public class AdminController {
         System.out.println(">>> ADMIN FETCH SHIPMENTS - WarehouseID: " + warehouseId + ", AdminID: " + adminId);
         
         if (adminId != null) {
-            return shipmentService.getShipmentsByAdmin(adminId);
+            List<Shipment> results = shipmentService.getShipmentsByAdmin(adminId);
+            System.out.println(">>> Found " + results.size() + " shipments for AdminID: " + adminId);
+            return results;
         } else if (warehouseId != null) {
-            return shipmentService.getShipmentsByWarehouse(warehouseId);
+            List<Shipment> results = shipmentService.getShipmentsByWarehouse(warehouseId);
+            System.out.println(">>> Found " + results.size() + " shipments for WarehouseID: " + warehouseId);
+            return results;
         }
-        return shipmentService.getAllShipments();
+        List<Shipment> results = shipmentService.getAllShipments();
+        System.out.println(">>> Found " + results.size() + " shipments total (no filter)");
+        return results;
     }
 
     @GetMapping("/drivers/available")

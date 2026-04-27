@@ -2,16 +2,20 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import AINotification from '../../components/AINotification';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { AlertTriangle, ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function AlertsPage() {
+  const { user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAlerts = async () => {
     try {
-      const res = await api.get('/alerts/all');
+      const adminId = user?.id;
+      const url = adminId ? `/alerts/all?adminId=${adminId}` : '/alerts/all';
+      const res = await api.get(url);
       const activeAlerts = res.data.filter(a => a.status === 'PENDING');
       const formattedAlerts = activeAlerts.map(a => ({
         id: a.id,
@@ -65,7 +69,9 @@ export default function AlertsPage() {
         return;
       }
 
-      const shipRes = await api.get(`/admin/shipments`);
+      const adminId = user?.id;
+      const shipUrl = adminId ? `/admin/shipments?adminId=${adminId}` : `/admin/shipments`;
+      const shipRes = await api.get(shipUrl);
       const shipment = shipRes.data.find(s => s.id.toString() === shipmentIdStr);
       
       const sourceWhId = shipment?.warehouse?.id || 1;

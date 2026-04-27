@@ -84,3 +84,5 @@ run_log.txt
 run_log_final.txt
 ai_debug.log
 db-backup/
+cleanup.sql
+scratch/

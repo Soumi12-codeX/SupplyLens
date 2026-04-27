@@ -86,7 +86,10 @@ public class AlertController {
     }*/
 
     @GetMapping("/all")
-    public List<Alert> getAllAlerts() {
+    public List<Alert> getAllAlerts(@RequestParam(required = false) Long adminId) {
+        if (adminId != null) {
+            return alertService.getAlertsByAdmin(adminId);
+        }
         return alertService.getAllAlerts();
     }
 

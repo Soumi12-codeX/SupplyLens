@@ -48,30 +48,46 @@ public class AlertService {
 
     @Transactional
     public Alert saveAlert(Alert alert) {
-        alert.setStatus(AlertStatus.PENDING);
-        alert.setTime(LocalDateTime.now());
-
         if (alert.getNodeName() != null) {
             List<Shipment> affected = shipmentRepo.findAffectedByNode(alert.getNodeName());
             if (!affected.isEmpty()) {
-                // Logic: Take the first affected shipment, find its warehouse,
-                // and assign the alert to that warehouse's admin.
-                Shipment firstShipment = affected.get(0);
-                Warehouse wh = firstShipment.getWarehouse();
+                // Group shipments by adminId to create personal alerts
+                java.util.Map<Long, List<Shipment>> byAdmin = affected.stream()
+                        .filter(s -> s.getAdminId() != null)
+                        .collect(Collectors.groupingBy(Shipment::getAdminId));
 
-                if (wh.getAdminUserId() != null) {
-                    alert.setAdminId(wh.getAdminUserId()); // Automatically link to the Warehouse Admin
+                Alert lastSaved = null;
+                for (java.util.Map.Entry<Long, List<Shipment>> entry : byAdmin.entrySet()) {
+                    Long adminId = entry.getKey();
+                    List<Shipment> adminAffected = entry.getValue();
+
+                    Alert personalAlert = new Alert();
+                    personalAlert.setAlertType(alert.getAlertType());
+                    personalAlert.setNodeName(alert.getNodeName());
+                    personalAlert.setMesssage(alert.getMesssage());
+                    personalAlert.setSeverity(alert.getSeverity());
+                    personalAlert.setStatus(AlertStatus.PENDING);
+                    personalAlert.setTime(LocalDateTime.now());
+                    personalAlert.setAdminId(adminId);
+
+                    String ids = adminAffected.stream()
+                            .map(s -> s.getId().toString())
+                            .collect(Collectors.joining(","));
+                    personalAlert.setAffectedShipmentIds(ids);
+
+                    // Trigger optimization for this specific admin's shipments
+                    triggerOptimization(personalAlert, adminAffected);
+                    
+                    lastSaved = alertRepo.save(personalAlert);
+                    messagingTemplate.convertAndSend("/topic/alerts", lastSaved);
                 }
-
-                String ids = affected.stream()
-                        .map(s -> s.getId().toString())
-                        .collect(Collectors.joining(","));
-                alert.setAffectedShipmentIds(ids);
-
-                triggerOptimization(alert, affected);
+                return lastSaved; // Return one of them for the controller response
             }
         }
 
+        // Fallback for non-node alerts or if no shipments affected
+        alert.setStatus(AlertStatus.PENDING);
+        alert.setTime(LocalDateTime.now());
         if (alert.getRouteOptions() != null) {
             for (RouteOption option : alert.getRouteOptions()) {
                 option.setAlert(alert);
@@ -166,6 +182,10 @@ public class AlertService {
 
     public List<Alert> getAllAlerts() {
         return alertRepo.findAll();
+    }
+
+    public List<Alert> getAlertsByAdmin(Long adminId) {
+        return alertRepo.findByAdminId(adminId);
     }
 
     public void selectRoute(Long alertId, Long routeOptionId) {

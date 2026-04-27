@@ -116,7 +116,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const res = await api.get('/alerts/all');
+        const adminId = user?.id;
+        const url = adminId ? `/alerts/all?adminId=${adminId}` : '/alerts/all';
+        const res = await api.get(url);
         const activeAlerts = res.data.filter(a => a.status === 'PENDING');
         const formattedAlerts = activeAlerts.map(a => ({
           id: a.id,
