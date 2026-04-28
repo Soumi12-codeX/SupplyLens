@@ -174,4 +174,22 @@ public class AlertController {
 
         return ResponseEntity.ok(driverAlerts);
     }
+
+    @GetMapping("/driver/{driverId}/debug")
+    public ResponseEntity<?> debugDriver(@PathVariable String driverId) {
+        List<Shipment> shipments = shipmentRepo.findByAssignedDriverId(driverId);
+        List<Alert> allAlerts = alertRepo.findAll();
+
+        return ResponseEntity.ok(Map.of(
+                "shipmentCount", shipments.size(),
+                "shipmentIds", shipments.stream().map(s -> s.getId().toString()).toList(),
+                "totalAlerts", allAlerts.size(),
+                "alertsWithAffectedIds", allAlerts.stream()
+                        .filter(a -> a.getAffectedShipmentIds() != null)
+                        .map(a -> Map.of(
+                                "id", a.getId(),
+                                "status", a.getStatus().toString(),
+                                "affectedIds", a.getAffectedShipmentIds()))
+                        .toList()));
+    }
 }
