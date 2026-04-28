@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
-import com.web.backend_SupplyLens.model.AlertStatus;
+
 import com.web.backend_SupplyLens.dto.RerouteRequest;
 import com.web.backend_SupplyLens.model.Alert;
 import com.web.backend_SupplyLens.model.RouteOption;
@@ -62,32 +62,28 @@ public class AlertController {
         return ResponseEntity.ok("Alert processed and optimization triggered.");
     }
 
-    /*
-     * private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>>
-     * options) {
-     * for (Map<String, Object> opt : options) {
-     * RouteOption routeOption = new RouteOption();
-     * routeOption.setAlert(alert);
-     * routeOption.setLabel((String) opt.get("label"));
-     * 
-     * // Convert List from Python path to a String for DB storage
-     * Object pathObj = opt.get("path");
-     * if (pathObj instanceof List) {
-     * routeOption.setPath(String.join(" -> ", (List<String>) pathObj));
-     * }
-     * 
-     * // FIX: Robust Number conversion to avoid ClassCastException from Python JSON
-     * Object hrs = opt.get("estimatedHours");
-     * routeOption.setEstimatedHours(hrs instanceof Number ? ((Number)
-     * hrs).intValue() : 0);
-     * 
-     * routeOption.setRiskLevel((String) opt.get("riskLevel"));
-     * routeOption.setTradeoff((String) opt.get("tradeoff"));
-     * 
-     * routeOptionRepo.save(routeOption);
-     * }
-     * }
-     */
+    /*private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>> options) {
+        for (Map<String, Object> opt : options) {
+            RouteOption routeOption = new RouteOption();
+            routeOption.setAlert(alert);
+            routeOption.setLabel((String) opt.get("label"));
+
+            // Convert List from Python path to a String for DB storage
+            Object pathObj = opt.get("path");
+            if (pathObj instanceof List) {
+                routeOption.setPath(String.join(" -> ", (List<String>) pathObj));
+            }
+
+            // FIX: Robust Number conversion to avoid ClassCastException from Python JSON
+            Object hrs = opt.get("estimatedHours");
+            routeOption.setEstimatedHours(hrs instanceof Number ? ((Number) hrs).intValue() : 0);
+
+            routeOption.setRiskLevel((String) opt.get("riskLevel"));
+            routeOption.setTradeoff((String) opt.get("tradeoff"));
+
+            routeOptionRepo.save(routeOption);
+        }
+    }*/
 
     @GetMapping("/all")
     public List<Alert> getAllAlerts(@RequestParam(required = false) Long adminId) {
@@ -149,47 +145,5 @@ public class AlertController {
             return nodeData;
         }).collect(Collectors.toList());
     }
-
-    @GetMapping("/driver/{driverId}")
-    public ResponseEntity<?> getAlertsForDriver(@PathVariable String driverId) {
-        // Find all shipments assigned to this driver
-        List<Shipment> shipments = shipmentRepo.findByAssignedDriverId(driverId);
-
-        if (shipments.isEmpty()) {
-            return ResponseEntity.ok(List.of());
-        }
-
-        // Get shipment IDs
-        List<String> shipmentIds = shipments.stream()
-                .map(s -> s.getId().toString())
-                .toList();
-
-        // Find alerts that affect these shipments
-        List<Alert> driverAlerts = alertRepo.findAll().stream()
-                .filter(a -> a.getAffectedShipmentIds() != null)
-                .filter(a -> shipmentIds.stream()
-                        .anyMatch(id -> a.getAffectedShipmentIds().contains(id)))
-                .filter(a -> a.getStatus() == AlertStatus.ACCEPTED) // only show approved alerts
-                .toList();
-
-        return ResponseEntity.ok(driverAlerts);
-    }
-
-    @GetMapping("/driver/{driverId}/debug")
-    public ResponseEntity<?> debugDriver(@PathVariable String driverId) {
-        List<Shipment> shipments = shipmentRepo.findByAssignedDriverId(driverId);
-        List<Alert> allAlerts = alertRepo.findAll();
-
-        return ResponseEntity.ok(Map.of(
-                "shipmentCount", shipments.size(),
-                "shipmentIds", shipments.stream().map(s -> s.getId().toString()).toList(),
-                "totalAlerts", allAlerts.size(),
-                "alertsWithAffectedIds", allAlerts.stream()
-                        .filter(a -> a.getAffectedShipmentIds() != null)
-                        .map(a -> Map.of(
-                                "id", a.getId(),
-                                "status", a.getStatus().toString(),
-                                "affectedIds", a.getAffectedShipmentIds()))
-                        .toList()));
-    }
+    
 }
