@@ -62,28 +62,32 @@ public class AlertController {
         return ResponseEntity.ok("Alert processed and optimization triggered.");
     }
 
-    /*private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>> options) {
-        for (Map<String, Object> opt : options) {
-            RouteOption routeOption = new RouteOption();
-            routeOption.setAlert(alert);
-            routeOption.setLabel((String) opt.get("label"));
-
-            // Convert List from Python path to a String for DB storage
-            Object pathObj = opt.get("path");
-            if (pathObj instanceof List) {
-                routeOption.setPath(String.join(" -> ", (List<String>) pathObj));
-            }
-
-            // FIX: Robust Number conversion to avoid ClassCastException from Python JSON
-            Object hrs = opt.get("estimatedHours");
-            routeOption.setEstimatedHours(hrs instanceof Number ? ((Number) hrs).intValue() : 0);
-
-            routeOption.setRiskLevel((String) opt.get("riskLevel"));
-            routeOption.setTradeoff((String) opt.get("tradeoff"));
-
-            routeOptionRepo.save(routeOption);
-        }
-    }*/
+    /*
+     * private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>>
+     * options) {
+     * for (Map<String, Object> opt : options) {
+     * RouteOption routeOption = new RouteOption();
+     * routeOption.setAlert(alert);
+     * routeOption.setLabel((String) opt.get("label"));
+     * 
+     * // Convert List from Python path to a String for DB storage
+     * Object pathObj = opt.get("path");
+     * if (pathObj instanceof List) {
+     * routeOption.setPath(String.join(" -> ", (List<String>) pathObj));
+     * }
+     * 
+     * // FIX: Robust Number conversion to avoid ClassCastException from Python JSON
+     * Object hrs = opt.get("estimatedHours");
+     * routeOption.setEstimatedHours(hrs instanceof Number ? ((Number)
+     * hrs).intValue() : 0);
+     * 
+     * routeOption.setRiskLevel((String) opt.get("riskLevel"));
+     * routeOption.setTradeoff((String) opt.get("tradeoff"));
+     * 
+     * routeOptionRepo.save(routeOption);
+     * }
+     * }
+     */
 
     @GetMapping("/all")
     public List<Alert> getAllAlerts(@RequestParam(required = false) Long adminId) {
@@ -145,5 +149,13 @@ public class AlertController {
             return nodeData;
         }).collect(Collectors.toList());
     }
-    
+
+    @PostMapping("/{id}/accept")
+    public ResponseEntity<?> acceptAlert(@PathVariable Long id) {
+        Alert alert = alertRepo.findById(id).orElseThrow();
+        alert.setStatus(AlertStatus.ACCEPTED);
+        alertRepo.save(alert);
+        return ResponseEntity.ok("Accepted");
+    }
+
 }
