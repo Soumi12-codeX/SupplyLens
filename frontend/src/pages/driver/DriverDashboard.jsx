@@ -277,10 +277,8 @@ export default function DriverDashboard() {
   // Derive whether the reroute popup should show:
 
   const showReroutePopup = activeShipment?.routeStatus === 'REROUTED'
-
-    && activeShipment?.activeRouteOptionId != null
-
-    && acknowledgedRouteOptionId !== activeShipment?.activeRouteOptionId;
+  && activeShipment?.activeRouteOptionId != null
+  && String(acknowledgedRouteOptionId) !== String(activeShipment?.activeRouteOptionId);
 
 
 
@@ -365,30 +363,18 @@ export default function DriverDashboard() {
 
 
   const handleReroute = async () => {
-
-    try {
-
-      const shipmentId = activeShipment.id.toString().replace('SHP-', '');
-
-      const res = await api.get(`/route/driver-link/${shipmentId}`);
-
-      if (res.data && res.data.link) {
-
-        window.open(res.data.link, '_blank');
-
-        // Mark THIS route option ID as acknowledged so popup won't reappear
-
-        setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
-
-      }
-
-    } catch (err) {
-
-      console.error("Failed to get reroute link:", err);
-
+  try {
+    // Use the secure endpoint — token sent automatically via api interceptor
+    const res = await api.get(`/driver/my-route-link`);
+    if (res.data?.googleMapsLink) {
+      window.open(res.data.googleMapsLink, '_blank');
+      setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
     }
-
-  };
+  } catch (err) {
+    console.error("Failed to get reroute link:", err);
+    alert("Could not generate route link. Please try again.");
+  }
+};
 
   if (loading || !truck) {
     return (
