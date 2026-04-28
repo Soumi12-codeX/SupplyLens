@@ -262,23 +262,36 @@ export default function DriverDashboard() {
 
 
 
+  // Poll for alerts/messages every 5 seconds
   useEffect(() => {
+    if (!user?.driverId) return;
 
-    fetchData();
+    const fetchAlerts = async () => {
+      try {
+        const res = await api.get(`/alerts/driver/${user.driverId}`);
+        const formatted = res.data.map(msg => ({
+          ...msg,
+          status: msg.status || 'pending',
+          type: 'ai_suggestion'
+        }));
+        setMessages(formatted);
+      } catch (err) {
+        // silent fail — don't crash dashboard on alert fetch failure
+      }
+    };
 
-    const interval = setInterval(fetchData, 3000); // Poll every 3s for smooth tracking
-
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 3000);
     return () => clearInterval(interval);
-
-  }, [user]);
+  }, [user?.driverId]);
 
 
 
   // Derive whether the reroute popup should show:
 
   const showReroutePopup = activeShipment?.routeStatus === 'REROUTED'
-  && activeShipment?.activeRouteOptionId != null
-  && String(acknowledgedRouteOptionId) !== String(activeShipment?.activeRouteOptionId);
+    && activeShipment?.activeRouteOptionId != null
+    && String(acknowledgedRouteOptionId) !== String(activeShipment?.activeRouteOptionId);
 
 
 
@@ -363,18 +376,18 @@ export default function DriverDashboard() {
 
 
   const handleReroute = async () => {
-  try {
-    // Use the secure endpoint — token sent automatically via api interceptor
-    const res = await api.get(`/driver/my-route-link`);
-    if (res.data?.googleMapsLink) {
-      window.open(res.data.googleMapsLink, '_blank');
-      setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
+    try {
+      // Use the secure endpoint — token sent automatically via api interceptor
+      const res = await api.get(`/driver/my-route-link`);
+      if (res.data?.googleMapsLink) {
+        window.open(res.data.googleMapsLink, '_blank');
+        setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
+      }
+    } catch (err) {
+      console.error("Failed to get reroute link:", err);
+      alert("Could not generate route link. Please try again.");
     }
-  } catch (err) {
-    console.error("Failed to get reroute link:", err);
-    alert("Could not generate route link. Please try again.");
-  }
-};
+  };
 
   if (loading || !truck) {
     return (

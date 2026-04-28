@@ -62,28 +62,32 @@ public class AlertController {
         return ResponseEntity.ok("Alert processed and optimization triggered.");
     }
 
-    /*private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>> options) {
-        for (Map<String, Object> opt : options) {
-            RouteOption routeOption = new RouteOption();
-            routeOption.setAlert(alert);
-            routeOption.setLabel((String) opt.get("label"));
-
-            // Convert List from Python path to a String for DB storage
-            Object pathObj = opt.get("path");
-            if (pathObj instanceof List) {
-                routeOption.setPath(String.join(" -> ", (List<String>) pathObj));
-            }
-
-            // FIX: Robust Number conversion to avoid ClassCastException from Python JSON
-            Object hrs = opt.get("estimatedHours");
-            routeOption.setEstimatedHours(hrs instanceof Number ? ((Number) hrs).intValue() : 0);
-
-            routeOption.setRiskLevel((String) opt.get("riskLevel"));
-            routeOption.setTradeoff((String) opt.get("tradeoff"));
-
-            routeOptionRepo.save(routeOption);
-        }
-    }*/
+    /*
+     * private void saveOptionsToDatabase(Alert alert, List<Map<String, Object>>
+     * options) {
+     * for (Map<String, Object> opt : options) {
+     * RouteOption routeOption = new RouteOption();
+     * routeOption.setAlert(alert);
+     * routeOption.setLabel((String) opt.get("label"));
+     * 
+     * // Convert List from Python path to a String for DB storage
+     * Object pathObj = opt.get("path");
+     * if (pathObj instanceof List) {
+     * routeOption.setPath(String.join(" -> ", (List<String>) pathObj));
+     * }
+     * 
+     * // FIX: Robust Number conversion to avoid ClassCastException from Python JSON
+     * Object hrs = opt.get("estimatedHours");
+     * routeOption.setEstimatedHours(hrs instanceof Number ? ((Number)
+     * hrs).intValue() : 0);
+     * 
+     * routeOption.setRiskLevel((String) opt.get("riskLevel"));
+     * routeOption.setTradeoff((String) opt.get("tradeoff"));
+     * 
+     * routeOptionRepo.save(routeOption);
+     * }
+     * }
+     */
 
     @GetMapping("/all")
     public List<Alert> getAllAlerts(@RequestParam(required = false) Long adminId) {
@@ -144,5 +148,30 @@ public class AlertController {
             nodeData.put("lng", node != null ? node.getLongitude() : 0);
             return nodeData;
         }).collect(Collectors.toList());
+    }
+
+    @GetMapping("/driver/{driverId}")
+    public ResponseEntity<?> getAlertsForDriver(@PathVariable String driverId) {
+        // Find all shipments assigned to this driver
+        List<Shipment> shipments = shipmentRepo.findByAssignedDriverId(driverId);
+
+        if (shipments.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+
+        // Get shipment IDs
+        List<String> shipmentIds = shipments.stream()
+                .map(s -> s.getId().toString())
+                .toList();
+
+        // Find alerts that affect these shipments
+        List<Alert> driverAlerts = alertRepo.findAll().stream()
+                .filter(a -> a.getAffectedShipmentIds() != null)
+                .filter(a -> shipmentIds.stream()
+                        .anyMatch(id -> a.getAffectedShipmentIds().contains(id)))
+                .filter(a -> a.getStatus() == AlertStatus.ACCEPTED) // only show approved alerts
+                .toList();
+
+        return ResponseEntity.ok(driverAlerts);
     }
 }
