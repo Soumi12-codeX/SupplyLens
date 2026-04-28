@@ -1,4 +1,4 @@
-DASBOARD - import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 import Sidebar from '../../components/Sidebar';
 
@@ -370,7 +370,7 @@ export default function DriverDashboard() {
 
       const shipmentId = activeShipment.id.toString().replace('SHP-', '');
 
-      const res = await api.get(`/route/driver-link/${shipmentId}`);
+      const res = await api.get(`/driver/my-route-link`);
 
       if (res.data && res.data.link) {
 
