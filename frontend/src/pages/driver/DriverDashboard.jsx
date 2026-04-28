@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+DASBOARD - import React, { useState, useEffect } from 'react';
 
 import Sidebar from '../../components/Sidebar';
 
@@ -262,36 +262,25 @@ export default function DriverDashboard() {
 
 
 
-  // Poll for alerts/messages every 5 seconds
   useEffect(() => {
-    if (!user?.driverId) return;
 
-    const fetchAlerts = async () => {
-      try {
-        const res = await api.get(`/alerts/driver/${user.driverId}`);
-        const formatted = res.data.map(msg => ({
-          ...msg,
-          status: msg.status || 'pending',
-          type: 'ai_suggestion'
-        }));
-        setMessages(formatted);
-      } catch (err) {
-        // silent fail — don't crash dashboard on alert fetch failure
-      }
-    };
+    fetchData();
 
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 3000);
+    const interval = setInterval(fetchData, 3000); // Poll every 3s for smooth tracking
+
     return () => clearInterval(interval);
-  }, [user?.driverId]);
+
+  }, [user]);
 
 
 
   // Derive whether the reroute popup should show:
 
   const showReroutePopup = activeShipment?.routeStatus === 'REROUTED'
+
     && activeShipment?.activeRouteOptionId != null
-    && String(acknowledgedRouteOptionId) !== String(activeShipment?.activeRouteOptionId);
+
+    && acknowledgedRouteOptionId !== activeShipment?.activeRouteOptionId;
 
 
 
@@ -376,17 +365,29 @@ export default function DriverDashboard() {
 
 
   const handleReroute = async () => {
+
     try {
-      // Use the secure endpoint — token sent automatically via api interceptor
-      const res = await api.get(`/driver/my-route-link`);
-      if (res.data?.googleMapsLink) {
-        window.open(res.data.googleMapsLink, '_blank');
+
+      const shipmentId = activeShipment.id.toString().replace('SHP-', '');
+
+      const res = await api.get(`/route/driver-link/${shipmentId}`);
+
+      if (res.data && res.data.link) {
+
+        window.open(res.data.link, '_blank');
+
+        // Mark THIS route option ID as acknowledged so popup won't reappear
+
         setAcknowledgedRouteOptionId(activeShipment.activeRouteOptionId);
+
       }
+
     } catch (err) {
+
       console.error("Failed to get reroute link:", err);
-      alert("Could not generate route link. Please try again.");
+
     }
+
   };
 
   if (loading || !truck) {
