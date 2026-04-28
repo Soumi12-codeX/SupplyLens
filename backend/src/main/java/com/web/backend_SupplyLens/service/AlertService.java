@@ -187,7 +187,7 @@ public class AlertService {
     public List<Alert> getAlertsByAdmin(Long adminId) {
         return alertRepo.findByAdminId(adminId);
     }
-
+    //helper
     public void selectRoute(Long alertId, Long routeOptionId) {
         Alert alert = alertRepo.findById(alertId).orElseThrow();
         alert.setStatus(AlertStatus.ACCEPTED);
