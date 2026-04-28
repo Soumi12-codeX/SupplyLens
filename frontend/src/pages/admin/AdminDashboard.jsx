@@ -232,24 +232,24 @@ export default function AdminDashboard() {
     setMapZoom(8);
   }, []);
 
-  const handleApproveAlert = async (alert) => {
-    try {
-      const bestOption = alert.routeOptions?.[0];
-      if (!bestOption) return;
+  const handleApproveAlert = async (alertData) => {
+  try {
+    const bestOption = alertData.routeOptions?.[0];
+    if (!bestOption) return;
 
-      const shipmentIdStr = alert.truckId.replace('SHP-', '');
-      const shipment = shipments.find(s => s.id.toString() === shipmentIdStr);
-      const sourceWhId = shipment?.warehouse?.id || 1;
-      const destWhId = shipment?.route?.destination?.id || 2;
+    const shipmentIdStr = alertData.truckId.replace('SHP-', '');
+    const shipment = shipments.find(s => s.id.toString() === shipmentIdStr);
+    const sourceWhId = shipment?.warehouse?.id || 1;
+    const destWhId = shipment?.route?.destination?.id || 2;
 
-      await api.post(`/alerts/${alert.id}/select-route/${bestOption.id}?sourceWhId=${sourceWhId}&destWhId=${destWhId}`);
-      
-      setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-      setRoadConditions((prev) => prev.filter((c) => c.alertId !== alert.id));
-    } catch (err) {
-      console.error("Failed to approve alert:", err);
-    }
-  };
+    await api.post(`/alerts/${alertData.id}/select-route/${bestOption.id}?sourceWhId=${sourceWhId}&destWhId=${destWhId}`);
+
+    setAlerts((prev) => prev.filter((a) => a.id !== alertData.id));
+    setRoadConditions((prev) => prev.filter((c) => c.alertId !== alertData.id));
+  } catch (err) {
+    console.error("Failed to approve alert:", err);
+  }
+};
 
   const handleDismissAlert = async (alertId) => {
     try {

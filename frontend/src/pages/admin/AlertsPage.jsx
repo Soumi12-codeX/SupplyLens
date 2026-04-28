@@ -55,38 +55,37 @@ export default function AlertsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleApproveAlert = async (alert) => {
-    try {
-      const bestOption = alert.routeOptions?.[0];
-      if (!bestOption) {
-        alert("No AI suggested route found for this alert.");
-        return;
-      }
-
-      const shipmentIdStr = alert.truckId.replace('SHP-', '');
-      if (isNaN(shipmentIdStr)) {
-        console.error("Invalid shipment ID:", shipmentIdStr);
-        return;
-      }
-
-      const adminId = user?.id;
-      const shipUrl = adminId ? `/admin/shipments?adminId=${adminId}` : `/admin/shipments`;
-      const shipRes = await api.get(shipUrl);
-      const shipment = shipRes.data.find(s => s.id.toString() === shipmentIdStr);
-      
-      const sourceWhId = shipment?.warehouse?.id || 1;
-      const destWhId = shipment?.route?.destination?.id || 2;
-
-      await api.post(`/alerts/${alert.id}/select-route/${bestOption.id}?sourceWhId=${sourceWhId}&destWhId=${destWhId}`);
-      
-      // Delay removal so the user sees the "Message sent to driver" button state
-      setTimeout(() => {
-        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-      }, 2000);
-    } catch (err) {
-      console.error("Failed to approve alert:", err);
+  const handleApproveAlert = async (alertData) => {
+  try {
+    const bestOption = alertData.routeOptions?.[0];
+    if (!bestOption) {
+      window.alert("No AI suggested route found for this alert."); // ← use window.alert explicitly
+      return;
     }
-  };
+
+    const shipmentIdStr = alertData.truckId.replace('SHP-', '');
+    if (isNaN(shipmentIdStr)) {
+      console.error("Invalid shipment ID:", shipmentIdStr);
+      return;
+    }
+
+    const adminId = user?.id;
+    const shipUrl = adminId ? `/admin/shipments?adminId=${adminId}` : `/admin/shipments`;
+    const shipRes = await api.get(shipUrl);
+    const shipment = shipRes.data.find(s => s.id.toString() === shipmentIdStr);
+
+    const sourceWhId = shipment?.warehouse?.id || 1;
+    const destWhId = shipment?.route?.destination?.id || 2;
+
+    await api.post(`/alerts/${alertData.id}/select-route/${bestOption.id}?sourceWhId=${sourceWhId}&destWhId=${destWhId}`);
+
+    setTimeout(() => {
+      setAlerts((prev) => prev.filter((a) => a.id !== alertData.id));
+    }, 2000);
+  } catch (err) {
+    console.error("Failed to approve alert:", err);
+  }
+};
 
   const handleDismissAlert = async (alertId) => {
     try {
